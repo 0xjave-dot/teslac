@@ -1,0 +1,189 @@
+import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { AreaChart, Area, ResponsiveContainer } from 'recharts'
+import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { useAuth } from './AuthContext'
+import { useBalance } from './useBalance'
+import { useAssets } from './useAssets'
+import { useHoldings } from './useHoldings'
+import { useTransactions } from './useTransactions'
+import { PriceChange } from './PriceChange'
+import { StatusBadge } from './StatusBadge'
+import { EmptyState } from './EmptyState'
+
+function generateSparkline(seed: number, points = 30) {
+  const data = []
+  let price = seed
+  for (let i = 0; i < points; i++) {
+    price = price * (1 + (Math.random() - 0.5) * 0.02)
+    data.push({ v: price })
+  }
+  return data
+}
+
+function fmt(n: number) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+export function Dashboard() {
+  const { currentUser } = useAuth()
+  const uid = currentUser?.uid
+  const balance = useBalance(uid)
+  const { assets, priceMap } = useAssets()
+  const holdings = useHoldings(uid)
+  const txs = useTransactions(uid, 5)
+
+  const tslaAsset = priceMap['TSLA']
+  const tslaPrice = tslaAsset?.currentPrice || 200
+  const sparklineData = useMemo(() => generateSparkline(tslaPrice), [Math.floor(tslaPrice / 10)])
+
+  const investedValue = holdings.reduce((sum, h) => {
+    const price = priceMap[h.symbol]?.currentPrice || 0
+    return sum + h.units * price
+  }, 0)
+
+  const costBasis = holdings.reduce((sum, h) => sum + h.units * h.avgBuyPrice, 0)
+  const pnl = investedValue - costBasis
+  const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0
+  const totalValue = balance.available + investedValue
+
+  return (
+    <div className="space-y-6">
+      {/* Portfolio hero */}
+      <div className="card p-8">
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <p className="text-white/50 text-xs tracking-widest uppercase mb-2">Total Portfolio Value</p>
+            <p className="text-4xl font-medium tracking-tight num text-white">${fmt(totalValue)}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className={`text-sm num ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
+                {pnl >= 0 ? '+' : ''}${fmt(Math.abs(pnl))} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+              </span>
+              <span className="text-white/30 text-xs">all-time P&L</span>
+            </div>
+          </div>
+          <div className="flex gap-8">
+            <div>
+              <p className="text-xs text-white/50">Available</p>
+              <p className="text-sm font-medium text-white num mt-1">${fmt(balance.available)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-white/50">Invested</p>
+              <p className="text-sm font-medium text-white num mt-1">${fmt(investedValue)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-6">
+        {/* Balance cards */}
+        <div className="space-y-4">
+          {[
+            { label: 'Available Balance', value: balance.available, color: 'bg-gain', textColor: 'text-white' },
+            { label: 'Locked (Pending)', value: balance.locked, color: 'bg-yellow-400', textColor: 'text-yellow-400' },
+            { label: 'Total Deposited', value: balance.total, color: 'bg-white/30', textColor: 'text-white' },
+          ].map(({ label, value, color, textColor }) => (
+            <div key={label} className="card p-5 flex items-center gap-4">
+              <div className={`w-1 h-8 rounded-full ${color} flex-shrink-0`} />
+              <div className="flex-1">
+                <p className="text-white/50 text-xs">{label}</p>
+                <p className={`text-xl font-medium num mt-0.5 ${textColor}`}>${fmt(value)}</p>
+              </div>
+            </div>
+          ))}
+          <div className="flex gap-2 mt-2">
+            <Link to="/wallet" className="btn-primary flex-1 text-center text-xs py-2">Deposit</Link>
+            <Link to="/wallet" className="btn-ghost flex-1 text-center text-xs py-2">Withdraw</Link>
+          </div>
+        </div>
+
+        {/* Chart */}
+        <div className="col-span-2 card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <span className="font-medium text-white text-sm">TSLA</span>
+              <span className="text-white/40 text-xs ml-2">Tesla Inc.</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-white font-medium num">${fmt(tslaPrice)}</span>
+              {tslaAsset && <PriceChange value={tslaAsset.change24h} showIcon className="text-xs" />}
+              <Link to="/markets/TSLA" className="text-accent text-xs hover:underline">View →</Link>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={sparklineData}>
+              <defs>
+                <linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="v" stroke="#06b6d4" strokeWidth={2} fill="url(#cg2)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Top assets */}
+      <div>
+        <p className="text-sm font-medium text-white mb-3">Top Assets</p>
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+          {assets.map((asset) => (
+            <Link
+              key={asset.symbol}
+              to={`/markets/${asset.symbol}`}
+              className="bg-navy-raised border border-white/[0.07] rounded-xl p-4 flex-shrink-0 w-44 hover:border-white/20 transition"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-white">{asset.symbol}</span>
+                <span className="text-xs text-white/50">{asset.name.split(' ')[0]}</span>
+              </div>
+              <p className="text-base num text-white">${fmt(asset.currentPrice)}</p>
+              <PriceChange value={asset.change24h} className="text-xs mt-1" />
+              <div className={`mt-3 h-0.5 rounded-full ${asset.change24h >= 0 ? 'bg-gain' : 'bg-loss'} opacity-60`} />
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Recent transactions */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-medium text-white">Recent Activity</p>
+          <Link to="/wallet" className="text-accent text-xs hover:underline">View all →</Link>
+        </div>
+        {txs.length === 0 ? (
+          <EmptyState message="No transactions yet. Make your first deposit." />
+        ) : (
+          <div>
+            {txs.map((tx) => (
+              <div key={tx.id} className="flex items-center justify-between py-3 border-b border-white/[0.05]">
+                <div className="flex items-center gap-3">
+                  {tx.type === 'deposit'
+                    ? <ArrowDownCircle className="w-5 h-5 text-gain" />
+                    : <ArrowUpCircle className="w-5 h-5 text-white/30" />
+                  }
+                  <div>
+                    <p className="text-sm text-white capitalize">{tx.type}</p>
+                    <p className="text-xs text-white/40">
+                      {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="num text-sm text-white">${fmt(tx.amount)}</span>
+                  <StatusBadge status={tx.status} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+
+
+
