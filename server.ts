@@ -1,7 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import cron from 'node-cron'
-import * as admin from 'firebase-admin'
+import { initializeApp, applicationDefault, cert, apps } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -10,7 +11,7 @@ import 'dotenv/config'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Initialize Firebase Admin
-let serviceAccount: admin.ServiceAccount | undefined
+let serviceAccount: any | undefined
 try {
   const saPath = join(__dirname, 'service-account.json')
   serviceAccount = JSON.parse(readFileSync(saPath, 'utf-8'))
@@ -18,15 +19,15 @@ try {
   console.log('[Server] No service-account.json found — using Application Default Credentials')
 }
 
-if (!admin.apps.length) {
-  admin.initializeApp(
+if (!apps.length) {
+  initializeApp(
     serviceAccount
-      ? { credential: admin.credential.cert(serviceAccount), projectId: process.env.FIREBASE_PROJECT_ID }
-      : { credential: admin.credential.applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID }
+      ? { credential: cert(serviceAccount), projectId: process.env.FIREBASE_PROJECT_ID }
+      : { credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID }
   )
 }
 
-const db = admin.firestore()
+const db = getFirestore()
 const app = express()
 app.use(cors())
 app.use(express.json())
@@ -78,6 +79,51 @@ async function fetchFinnhubCrypto(symbol: string): Promise<{ price: number; chan
   }
 }
 
+async function fetchCoinGeckoCrypto(symbol: string): Promise<{ price: number; change: number } | null> {
+  const idMap: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin' }
+  const id = idMap[symbol]
+  if (!id) return null
+  try {
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    })
+    if (!res.ok) { console.error(`[Coingecko] HTTP ${res.status} for ${symbol}`); return null }
+    const data = await res.json() as any
+    const entry = data[id]
+    if (!entry || typeof entry.usd !== 'number') return null
+    const price = entry.usd
+    const change = typeof entry.usd_24h_change === 'number' ? entry.usd_24h_change : 0
+    return { price, change }
+  } catch (e) {
+    console.error(`[Coingecko] Error fetching crypto ${symbol}:`, e)
+    return null
+  }
+}
+
+async function fetchNasdaqStock(symbol: string): Promise<{ price: number; change: number } | null> {
+  try {
+    const url = `https://api.nasdaq.com/api/quote/${symbol}/info?assetclass=stocks`
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        Accept: 'application/json, text/plain, */*',
+      },
+    })
+    if (!res.ok) { console.error(`[Nasdaq] HTTP ${res.status} for ${symbol}`); return null }
+    const json = await res.json() as any
+    const data = json?.data?.primaryData
+    if (!data || typeof data.lastSalePrice !== 'string') return null
+    const rawPrice = data.lastSalePrice.replace(/[^0-9.-]+/g, '')
+    const price = parseFloat(rawPrice)
+    const change = typeof data.percentageChange === 'string' ? parseFloat(data.percentageChange.replace('%', '')) : 0
+    if (!Number.isFinite(price)) return null
+    return { price, change: Number.isFinite(change) ? change : 0 }
+  } catch (e) {
+    console.error(`[Nasdaq] Error fetching stock ${symbol}:`, e)
+    return null
+  }
+}
+
 function simulatePrice(symbol: string): number {
   if (symbol === 'USDT') return 1.00
   const seeded = SEEDED[symbol]
@@ -92,12 +138,12 @@ function simulatePrice(symbol: string): number {
 
 async function pollPrices() {
   const batch = db.batch()
-  const now = admin.firestore.FieldValue.serverTimestamp()
+  const now = FieldValue.serverTimestamp()
   const ts = new Date().toISOString()
 
-  // Fetch Finnhub stocks
+  // Fetch stocks (Finnhub if key present, otherwise Nasdaq public API)
   for (const sym of FINNHUB_STOCKS) {
-    const result = await fetchFinnhubStock(sym)
+    const result = FINNHUB_API_KEY ? await fetchFinnhubStock(sym) : await fetchNasdaqStock(sym)
     if (result) {
       priceCache[sym] = { currentPrice: result.price, change24h: result.change }
     } else if (priceCache[sym]) {
@@ -109,9 +155,9 @@ async function pollPrices() {
     }
   }
 
-  // Fetch Finnhub cryptos
+  // Fetch cryptos (Finnhub if key present, otherwise CoinGecko)
   for (const sym of Object.keys(CRYPTO_MAP)) {
-    const result = await fetchFinnhubCrypto(sym)
+    const result = FINNHUB_API_KEY ? await fetchFinnhubCrypto(sym) : await fetchCoinGeckoCrypto(sym)
     if (result) {
       priceCache[sym] = { currentPrice: result.price, change24h: result.change }
     } else if (priceCache[sym]) {
