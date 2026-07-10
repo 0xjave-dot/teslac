@@ -43,7 +43,6 @@ export function Register() {
         country: form.country,
         photoURL: '',
         role: 'user',
-        createdAt: null,
       })
       navigate('/dashboard')
     } catch (err: unknown) {
