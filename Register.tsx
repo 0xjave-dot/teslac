@@ -35,6 +35,7 @@ export function Register() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, form.email, form.password)
       await updateProfile(cred.user, { displayName: form.name })
+      await ensureUserDoc(cred.user)
       await updateUserProfile(cred.user.uid, {
         uid: cred.user.uid,
         name: form.name,

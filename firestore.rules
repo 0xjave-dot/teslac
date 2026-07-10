@@ -22,7 +22,7 @@ service cloud.firestore {
     }
 
     match /holdings/{uid}/assets/{symbol} {
-      allow read, write: if request.auth.uid == uid;
+      allow read, write: if request.auth.uid == uid || isAdmin();
     }
 
     match /orders/{orderId} {

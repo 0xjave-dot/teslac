@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { onAuthStateChanged, User } from 'firebase/auth'
 import { auth } from './firebase'
-import { onUserDoc } from './firestore'
+import { ensureUserDoc, onUserDoc } from './firestore'
 import type { UserDoc } from './types'
 
 interface AuthContextValue {
@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!currentUser) return
+    ensureUserDoc(currentUser).catch(() => undefined)
     const unsub = onUserDoc(currentUser.uid, (doc) => {
       setUserDoc(doc)
       setLoading(false)

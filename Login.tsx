@@ -32,7 +32,8 @@ export function Login() {
     setError('')
     setLoading(true)
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      const cred = await signInWithEmailAndPassword(auth, email, password)
+      await ensureUserDoc(cred.user)
       navigate('/dashboard')
     } catch (err: unknown) {
       const code = (err as { code?: string }).code || ''

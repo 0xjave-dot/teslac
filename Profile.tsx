@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { updateProfile, reauthenticateWithCredential, updatePassword, EmailAuthProvider } from 'firebase/auth'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { Camera, Lock, Shield, Eye, EyeOff } from 'lucide-react'
@@ -10,8 +10,8 @@ import { Toast } from './Toast'
 
 export function Profile() {
   const { currentUser, userDoc } = useAuth()
-  const [name, setName] = useState(userDoc?.name || currentUser?.displayName || '')
-  const [country, setCountry] = useState(userDoc?.country || '')
+  const [name, setName] = useState('')
+  const [country, setCountry] = useState('')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [avatarLoading, setAvatarLoading] = useState(false)
@@ -28,6 +28,11 @@ export function Profile() {
   const isGoogle = currentUser?.providerData[0]?.providerId === 'google.com'
 
   const initials = (userDoc?.name || currentUser?.displayName || 'U').slice(0, 2).toUpperCase()
+
+  useEffect(() => {
+    setName(userDoc?.name || currentUser?.displayName || '')
+    setCountry(userDoc?.country || '')
+  }, [userDoc, currentUser])
 
   async function handleSave() {
     if (!currentUser) return
