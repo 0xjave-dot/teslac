@@ -29,10 +29,13 @@ function toDate(val: unknown): Date | null {
 }
 
 export async function ensureUserDoc(user: User) {
-  const ref = doc(db, 'users', user.uid)
-  const snap = await getDoc(ref)
-  if (!snap.exists()) {
-    await setDoc(ref, {
+  const userRef = doc(db, 'users', user.uid)
+  const balRef = doc(db, 'balances', user.uid)
+
+  const [userSnap, balanceSnap] = await Promise.all([getDoc(userRef), getDoc(balRef)])
+
+  if (!userSnap.exists()) {
+    await setDoc(userRef, {
       uid: user.uid,
       name: user.displayName || '',
       email: user.email || '',
@@ -41,14 +44,19 @@ export async function ensureUserDoc(user: User) {
       role: 'user',
       createdAt: serverTimestamp(),
     })
-    await setDoc(doc(db, 'balances', user.uid), {
+  }
+
+  if (!balanceSnap.exists()) {
+    await setDoc(balRef, {
       available: 0,
       locked: 0,
       total: 0,
       updatedAt: serverTimestamp(),
     })
   }
-  return snap.data() as UserDoc | undefined
+
+  const snap = userSnap.exists() ? userSnap : await getDoc(userRef)
+  return snap.exists() ? (snap.data() as UserDoc) : undefined
 }
 
 export async function getUserDoc(uid: string): Promise<UserDoc | null> {
@@ -59,7 +67,7 @@ export async function getUserDoc(uid: string): Promise<UserDoc | null> {
 }
 
 export async function updateUserProfile(uid: string, data: Partial<UserDoc>) {
-  await updateDoc(doc(db, 'users', uid), { ...data, updatedAt: serverTimestamp() })
+  await setDoc(doc(db, 'users', uid), { ...data, updatedAt: serverTimestamp() }, { merge: true })
 }
 
 export function onUserDoc(uid: string, cb: (u: UserDoc | null) => void) {
