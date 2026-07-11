@@ -1,7 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import cron from 'node-cron'
-import { initializeApp, applicationDefault, cert, apps } from 'firebase-admin/app'
+import { initializeApp, applicationDefault, cert, getApps } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -19,7 +19,7 @@ try {
   console.log('[Server] No service-account.json found — using Application Default Credentials')
 }
 
-if (!apps.length) {
+if (!getApps().length) {
   initializeApp(
     serviceAccount
       ? { credential: cert(serviceAccount), projectId: process.env.FIREBASE_PROJECT_ID }
