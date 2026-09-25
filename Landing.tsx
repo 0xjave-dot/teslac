@@ -1,181 +1,37 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ArrowRight, BarChart3, Check, ChevronRight, Clock3, Menu, Search, ShieldCheck, TrendingUp, WalletCards, X, Zap } from 'lucide-react'
 import { Logo } from './Logo'
 import { useAssets } from './useAssets'
 import { isTslaPriceFresh } from './priceUtils'
 import { StockPriceChart } from './StockPriceChart'
 import { PriceChange } from './PriceChange'
+import type { Asset } from './types'
 
-const steps = [
-  {
-    num: '01',
-    icon: '💳',
-    title: 'Fund your account',
-    desc: 'Submit a deposit request. Our team reviews and approves it, typically within 24 hours.',
-  },
-  {
-    num: '02',
-    icon: '📈',
-    title: 'Browse live assets',
-    desc: 'Explore Tesla stock, Bitcoin, Ethereum and more — all at real-time market prices.',
-  },
-  {
-    num: '03',
-    icon: '⚡',
-    title: 'Execute orders',
-    desc: 'Buy and sell instantly. Track your portfolio performance and P&L in real time.',
-  },
-]
+const fmtPrice = (a?: Asset) => a && Number.isFinite(a.currentPrice) && a.currentPrice > 0 ? `$${a.currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
+function live(a: Asset | undefined, now: number) { return Boolean(a && a.priceStatus === 'live' && typeof a.priceUpdatedAt === 'number' && now - a.priceUpdatedAt >= 0 && now - a.priceUpdatedAt <= 30000 && a.currentPrice > 0) }
+function Glyph({ symbol, type }: { symbol: string; type?: string }) { return <span className={`asset-glyph ${type === 'crypto' ? 'crypto' : ''}`}>{symbol === 'TSLA' ? 'T' : symbol.slice(0, 1)}</span> }
+function Spark({ positive }: { positive?: boolean }) { return <svg viewBox="0 0 88 28" className={`spark ${positive ? 'up' : ''}`}><path d="M1 22 C 10 20, 12 24, 20 17 S 31 18, 38 12 S 49 15, 56 9 S 69 12, 87 3" /></svg> }
 
 export function Landing() {
-  const { priceMap, now } = useAssets()
-  const tslaAsset = priceMap.TSLA
-  const tslaLive = isTslaPriceFresh(tslaAsset, now)
-
-  return (
-    <div className="bg-[#F8F9FC] min-h-screen">
-      {/* Navbar */}
-      <nav className="bg-[#F8F9FC]/80 backdrop-blur border-b border-gray-100 sticky top-0 z-50">
-        <div className="max-w-content mx-auto px-8 h-16 flex items-center justify-between">
-          <Logo size="sm" textColor="text-gray-900" />
-          <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="border border-gray-300 text-gray-700 rounded-full px-5 py-2 text-sm hover:bg-gray-100 transition"
-            >
-              Sign in
-            </Link>
-            <Link
-              to="/register"
-              className="bg-accent text-white rounded-full px-5 py-2 text-sm hover:bg-accent/90 transition"
-            >
-              Get started
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <section className="min-h-[92vh] grid md:grid-cols-2 items-center">
-        <div className="flex flex-col justify-center pl-8 md:pl-24 pr-8 py-16">
-          <span className="bg-accent/10 text-accent text-xs px-3 py-1 rounded-full inline-block mb-6 w-fit">
-            Live Prices · Real Orders · Instant Execution
-          </span>
-          <h1 className="text-[clamp(2.5rem,5vw,4.5rem)] font-medium leading-[1.05] tracking-tight text-gray-950">
-            Invest in Tesla
-            <br />
-            <span className="text-accent">&amp; Top Assets</span>
-          </h1>
-          <p className="text-gray-500 text-lg mt-6 max-w-sm leading-relaxed">
-            A live demo trading platform. Practice buying stocks and crypto with real market prices, no risk.
-          </p>
-          <div className="mt-10 flex gap-3">
-            <Link
-              to="/register"
-              className="bg-accent text-white rounded-full px-6 py-3 text-sm font-medium hover:bg-accent/90 transition"
-            >
-              Start Trading
-            </Link>
-            <Link
-              to="/markets"
-              className="border border-gray-300 text-gray-700 rounded-full px-6 py-3 text-sm hover:bg-gray-100 transition"
-            >
-              View Markets
-            </Link>
-          </div>
-          <div className="mt-14 flex gap-10">
-            {[
-              { stat: '9 Assets', label: 'Available to trade' },
-              { stat: 'Live Prices', label: 'Updated every 10s' },
-              { stat: 'Instant', label: 'Order execution' },
-            ].map((s) => (
-              <div key={s.stat}>
-                <p className="text-2xl font-medium text-gray-950">{s.stat}</p>
-                <p className="text-sm text-gray-400 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right visual */}
-        <div className="hidden md:flex items-center justify-center pr-16 py-16">
-          <div className="bg-navy-base rounded-3xl shadow-2xl shadow-navy-base/50 p-6 w-80">
-            <p className="text-white/40 text-xs uppercase tracking-wider mb-3">TSLA · Market price</p>
-            <p className="text-white text-2xl font-medium num">
-              {tslaLive && tslaAsset ? `$${tslaAsset.currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Unavailable'}
-            </p>
-            <div className="flex items-center justify-between mt-1">
-              <p className={`text-xs ${tslaLive ? 'text-gain' : 'text-loss'}`}>
-                {tslaLive ? 'Live quote · refreshes every 10s' : tslaAsset?.priceError || 'Live quote unavailable'}
-              </p>
-              {tslaLive && tslaAsset && <PriceChange value={tslaAsset.change24h} className="text-xs" />}
-            </div>
-
-            <div className="mt-4 -mx-2">
-              <StockPriceChart symbol="TSLA" range="1D" asset={tslaAsset || null} now={now} height={80} showAxes={false} />
-            </div>
-
-            <div className="mt-4 space-y-2.5">
-              <div className="flex items-center justify-between py-2 border-b border-white/[0.06]">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium">
-                    T
-                  </div>
-                  <div>
-                    <p className="text-white text-xs font-medium">TSLA</p>
-                    <p className="text-white/40 text-[10px]">Tesla Inc.</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-white text-xs num">
-                    {tslaLive && tslaAsset ? `$${tslaAsset.currentPrice.toFixed(2)}` : 'Unavailable'}
-                  </p>
-                  {tslaLive && tslaAsset && <PriceChange value={tslaAsset.change24h} className="text-[10px]" />}
-                </div>
-              </div>
-            </div>
-
-            <button className="mt-4 w-full bg-buy text-navy-base rounded-lg py-2.5 text-sm font-medium hover:bg-buy/90 transition">
-              Buy TSLA
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section className="bg-white border-t border-gray-100 py-24">
-        <div className="max-w-content mx-auto px-8">
-          <h2 className="text-3xl font-medium tracking-tight text-gray-950 text-center mb-16">How it works</h2>
-          <div className="grid md:grid-cols-3 gap-12">
-            {steps.map((step) => (
-              <div key={step.num} className="text-center">
-                <div className="text-xs text-gray-400 font-medium tracking-wider mb-4">{step.num}</div>
-                <div className="text-4xl mb-4">{step.icon}</div>
-                <h3 className="text-lg font-medium text-gray-950 mb-2">{step.title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-[#F8F9FC] border-t border-gray-100 py-10">
-        <div className="max-w-content mx-auto px-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Logo size="sm" textColor="text-gray-900" />
-            <span className="text-gray-400 text-xs">© 2025 Tesla Stock Investment. Demo platform only.</span>
-          </div>
-          <div className="flex gap-4">
-            <Link to="/login" className="text-gray-500 text-sm hover:text-gray-900 transition">Sign in</Link>
-            <Link to="/register" className="text-gray-500 text-sm hover:text-gray-900 transition">Register</Link>
-          </div>
-        </div>
-      </footer>
-    </div>
-  )
+  const { assets, priceMap, now } = useAssets(); const tsla = priceMap.TSLA; const tslaLive = isTslaPriceFresh(tsla, now)
+  const [menuOpen, setMenuOpen] = useState(false); const [scrolled, setScrolled] = useState(false)
+  const featured = ['TSLA', 'BTC', 'ETH', 'SOL', 'BNB'].map(s => priceMap[s] || assets.find(a => a.symbol === s)).filter(Boolean) as Asset[]
+  useEffect(() => { const fn = () => setScrolled(window.scrollY > 14); window.addEventListener('scroll', fn); return () => window.removeEventListener('scroll', fn) }, [])
+  return <div className="landing-page">
+    <nav className={`landing-nav ${scrolled ? 'is-scrolled' : ''}`}><div className="landing-container nav-inner"><Link to="/"><Logo size="md" /></Link><div className="nav-links"><a href="#markets">Markets</a><a href="#how-it-works">How It Works</a><a href="#assets">Assets</a></div><div className="nav-actions"><Link to="/login" className="nav-signin">Sign in</Link><Link to="/register" className="button button-primary button-small">Get Started <ArrowRight size={14} /></Link></div><button className="menu-toggle" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu">{menuOpen ? <X /> : <Menu />}</button></div>{menuOpen && <div className="mobile-menu landing-container"><a href="#markets" onClick={() => setMenuOpen(false)}>Markets</a><a href="#how-it-works" onClick={() => setMenuOpen(false)}>How It Works</a><a href="#assets" onClick={() => setMenuOpen(false)}>Assets</a><Link to="/login">Sign in</Link><Link to="/register" className="button button-primary">Get Started <ArrowRight size={15} /></Link></div>}</nav>
+    <main>
+      <section className="hero landing-container"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-dot" /> REAL MARKETS <i>·</i> REAL-TIME PRICES <i>·</i> DEMO TRADING</div><h1>Trade the markets.<br /><span>Without the risk.</span></h1><p>Practice buying and selling stocks and crypto using live market prices in a simulated trading environment.</p><div className="hero-actions"><Link to="/register" className="button button-primary">Start Trading <ArrowRight size={17} /></Link><Link to="/markets" className="button button-secondary">Explore Markets</Link></div><div className="trust-row"><span><BarChart3 size={15} /> Market data</span><span><Zap size={15} /> Instant execution</span><span><WalletCards size={15} /> Portfolio tracking</span></div></div><div className="hero-visual"><div className="hero-glow" /><div className="floating-card portfolio-float"><span>Portfolio</span><strong>$12,480.32</strong><em>+2.41%</em></div><div className="floating-card change-float"><span><TrendingUp size={13} /> Today's change</span><strong>+2.41%</strong></div><div className="floating-card order-float"><Check size={15} /><span><strong>Order executed</strong>TSLA · Buy</span></div><div className="terminal-card"><div className="terminal-top"><div><span className="terminal-kicker">Tesla Invest</span><strong>Markets</strong><span className="live-badge"><span /> Live</span></div><div className="terminal-icons"><Search size={14} /> •••</div></div><div className="terminal-assets">{['TSLA', 'BTC', 'ETH'].map(s => { const a = priceMap[s]; const isLive = live(a, now); return <div className="terminal-asset" key={s}><Glyph symbol={s} type={a?.type} /><div><strong>{s}</strong><span>{a?.name || s}</span></div><div className="terminal-quote"><strong>{isLive ? fmtPrice(a) : '—'}</strong><span className={isLive && (a?.change24h || 0) >= 0 ? 'positive-text' : ''}>{isLive ? <PriceChange value={a!.change24h} /> : 'Unavailable'}</span></div></div> })}</div><div className="chart-heading"><div><span>TSLA · Tesla Inc.</span><strong>{tslaLive ? fmtPrice(tsla) : 'Market data unavailable'}</strong></div><div className="range-tabs"><b>1D</b><span>1W</span><span>1M</span><span>3M</span><span>1Y</span></div></div><div className="terminal-chart"><StockPriceChart symbol="TSLA" range="1D" asset={tsla || null} now={now} height={168} showAxes /></div><div className="terminal-footer"><div><Glyph symbol="TSLA" /><span><strong>TSLA</strong><small>Tesla Inc. · {tslaLive ? 'Market price' : 'Market data unavailable'}</small></span></div><button disabled={!tslaLive}>Buy TSLA <ArrowRight size={13} /></button></div></div></div></section>
+      <div className="ticker-wrap" id="markets"><div className="ticker landing-container"><span className="ticker-label">MARKETS</span>{['TSLA', 'BTC', 'ETH', 'AAPL', 'NVDA'].map(s => { const a = priceMap[s]; const isLive = live(a, now); return <div className="ticker-item" key={s}><Glyph symbol={s} type={a?.type} /><strong>{s}</strong><span>{isLive ? fmtPrice(a) : '—'}</span><small className={isLive && (a?.change24h || 0) >= 0 ? 'positive-text' : ''}>{isLive ? <PriceChange value={a!.change24h} /> : 'Unavailable'}</small></div> })}<ChevronRight size={17} className="ticker-arrow" /></div></div>
+      <section className="section"><div className="landing-container"><Intro eyebrow="THE PLATFORM" title="Everything you need to practice trading." text="Explore markets, place simulated orders, and track your portfolio from one simple platform." /><div className="feature-grid">{[[BarChart3, 'Live Market Data', 'Explore supported assets using current market information when available.'], [Zap, 'Instant Orders', 'Buy and sell assets through a simple simulated trading experience.'], [WalletCards, 'Track Your Portfolio', 'Monitor holdings, performance, transactions and portfolio value in one place.']].map(([Icon, title, text]) => { const I = Icon as typeof BarChart3; return <div className="feature-card" key={title as string}><div className="feature-icon"><I size={20} /></div><h3>{title as string}</h3><p>{text as string}</p><ArrowRight className="feature-arrow" size={17} /></div> })}</div></div></section>
+      <section className="section showcase-section"><div className="landing-container showcase"><div className="showcase-dashboard"><div className="dash-sidebar"><Logo size="sm" /><span className="dash-active"><BarChart3 size={15} /> Overview</span><span><TrendingUp size={15} /> Markets</span><span><WalletCards size={15} /> Portfolio</span><span><Clock3 size={15} /> Activity</span></div><div className="dash-main"><div className="dash-header">Portfolio <span>● 12 positions · Live</span></div><div className="dash-metrics"><div><span>Portfolio Value</span><strong>$12,480.32</strong><em>+2.41% today</em></div><div><span>Today's Performance</span><strong className="positive-text">+$284.20</strong><em className="positive-text">+2.41%</em></div></div><div className="dash-chart"><div className="dash-chart-title">Performance <span>1D &nbsp; 1W &nbsp; <b>1M</b> &nbsp; 3M</span></div><div className="fake-chart"><svg viewBox="0 0 520 130" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#3b82f6" stopOpacity=".32" /><stop offset="1" stopColor="#3b82f6" stopOpacity="0" /></linearGradient></defs><path d="M0 112 C34 105 45 108 70 88 S110 100 136 77 S167 84 196 62 S222 80 250 48 S281 63 307 40 S345 69 375 42 S407 50 435 22 S477 45 520 8 V130 H0Z" fill="url(#area)" /><path d="M0 112 C34 105 45 108 70 88 S110 100 136 77 S167 84 196 62 S222 80 250 48 S281 63 307 40 S345 69 375 42 S407 50 435 22 S477 45 520 8" fill="none" stroke="#60a5fa" strokeWidth="2" /></svg></div></div><div className="dash-bottom"><div><span>Holdings</span>{['TSLA', 'BTC', 'ETH'].map(s => <p key={s}><Glyph symbol={s} type={s === 'TSLA' ? 'stock' : 'crypto'} /><b>{s}</b><small>{live(priceMap[s], now) ? fmtPrice(priceMap[s]) : '—'}</small></p>)}</div><div><span>Recent Activity</span><p><Check size={13} className="positive-text" /> Bought TSLA</p><p><Check size={13} className="positive-text" /> Sold BTC</p><p><Check size={13} className="positive-text" /> Bought ETH</p></div></div></div></div><div className="showcase-copy"><Intro eyebrow="ONE CLEAR VIEW" title="See your portfolio in real time." text="Keep your positions, performance and activity in one clear view." align="left" /><div className="numbered-list">{[['01', 'Know what you own', 'See your assets and current portfolio allocation.'], ['02', 'Follow performance', 'Track gains and losses over time.'], ['03', 'Review activity', 'Keep your trading activity organized.']].map(([num, title, text]) => <div key={num}><b>{num}</b><span><strong>{title}</strong><small>{text}</small></span></div>)}</div></div></div></section>
+      <section className="section" id="assets"><div className="landing-container"><div className="section-row"><Intro eyebrow="SUPPORTED ASSETS" title="Explore the markets." text="Browse supported stocks and crypto assets before placing an order." align="left" /><Link to="/markets" className="text-link">View all markets <ArrowRight size={15} /></Link></div><div className="asset-grid">{featured.map(a => { const isLive = live(a, now); return <div className="asset-card" key={a.symbol}><div className="asset-card-top"><Glyph symbol={a.symbol} type={a.type} /><span><strong>{a.symbol}</strong><small>{a.name}</small></span><Spark positive={isLive && a.change24h >= 0} /></div><div className="asset-card-bottom"><strong>{isLive ? fmtPrice(a) : 'Market data unavailable'}</strong><span className={isLive && a.change24h >= 0 ? 'positive-text' : ''}>{isLive ? <PriceChange value={a.change24h} /> : '—'}</span></div></div> })}</div></div></section>
+      <section className="section steps-section" id="how-it-works"><div className="landing-container"><Intro eyebrow="A SIMPLE START" title="Start trading in three steps." text="Go from curious to confident with a clear, simulated trading experience." /><div className="steps-grid">{[[Search, 'Create your account', 'Sign up and set up your trading profile.'], [BarChart3, 'Explore the markets', 'Browse supported stocks and crypto using available market data.'], [TrendingUp, 'Place your trade', 'Buy or sell assets and monitor your simulated portfolio.']].map(([Icon, title, text], i) => { const I = Icon as typeof Search; return <div className="step" key={title as string}><div className="step-icon"><I size={22} /></div><span className="step-number">0{i + 1}</span><h3>{title as string}</h3><p>{text as string}</p></div> })}</div></div></section>
+      <section className="section bento-section"><div className="landing-container"><Intro eyebrow="WHY TESLA INVEST" title="Trading practice, built around simplicity." text="A focused environment for learning the market without unnecessary complexity." /><div className="bento-grid">{[['Real Market Prices', 'Practice with market information instead of arbitrary demo numbers.'], ['Simple Interface', 'Focus on the essentials without overwhelming dashboards.'], ['Portfolio Tracking', 'See your holdings and performance in one place.'], ['Fast Execution', 'Submit simulated orders through a streamlined interface.']].map(([title, text], i) => <div className={`bento-card bento-${i + 1}`} key={title}><TrendingUp size={21} /><h3>{title}</h3><p>{text}</p><span>0{i + 1}</span></div>)}</div></div></section>
+      <section className="trust-section"><div className="landing-container"><Intro eyebrow="BUILT FOR CLARITY" title="Your account, your portfolio, your control." text="The essentials are easy to find, easy to understand, and connected to the tools you already use." /><div className="trust-grid">{[[ShieldCheck, 'Secure authentication', 'Use the existing authentication system.'], [Clock3, 'Transparent activity', 'Review your transactions and account activity.'], [BarChart3, 'Clear portfolio data', 'See your holdings and performance without unnecessary complexity.']].map(([Icon, title, text]) => { const I = Icon as typeof ShieldCheck; return <div key={title as string}><I size={19} /><span><strong>{title as string}</strong><small>{text as string}</small></span></div> })}</div></div></section>
+      <section className="final-cta landing-container"><div><span className="eyebrow">TAKE THE NEXT STEP</span><h2>Ready to explore the markets?</h2><p>Create your account and start practicing with Tesla Invest.</p></div><div className="cta-actions"><Link to="/register" className="button button-primary">Get Started <ArrowRight size={16} /></Link><Link to="/markets" className="button button-secondary">Explore Markets</Link></div></section>
+    </main>
+    <footer className="landing-footer"><div className="landing-container footer-grid"><div><Logo size="md" /><p>Practice trading with real market information.</p><small>© 2026 Tesla Invest. Demo trading platform.</small></div><div><strong>Platform</strong><Link to="/markets">Markets</Link><a href="#how-it-works">How It Works</a><a href="#assets">Assets</a></div><div><strong>Account</strong><Link to="/login">Sign In</Link><Link to="/register">Get Started</Link></div><div><strong>Legal</strong><a href="#">Terms</a><a href="#">Privacy</a></div></div></footer>
+  </div>
 }
-
-
-
-
-
+function Intro({ eyebrow, title, text, align = 'center' }: { eyebrow: string; title: string; text: string; align?: 'left' | 'center' }) { return <div className={`section-intro ${align === 'left' ? 'align-left' : ''}`}><span>{eyebrow}</span><h2>{title}</h2><p>{text}</p></div> }
