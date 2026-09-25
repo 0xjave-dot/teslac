@@ -68,7 +68,7 @@ const priceCache: Record<string, {
   currentPrice: number
   change24h: number
   priceStatus?: 'live' | 'error'
-  priceSource?: 'finnhub' | 'seeded'
+  priceSource?: 'finnhub' | 'nasdaq' | 'coingecko' | 'freecrypto' | 'seeded'
   priceUpdatedAt?: number
   priceError?: string | null
 }> = {}
@@ -94,25 +94,33 @@ async function fetchFinnhubStock(symbol: string): Promise<{ price: number; chang
 async function updateTslaPrice() {
   const ref = db.collection('assets').doc('TSLA')
   let result: { price: number; change: number }
+  let priceSource: 'finnhub' | 'nasdaq' = 'finnhub'
 
   try {
     result = await fetchFinnhubStock('TSLA')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Finnhub quote request failed.'
-    console.error(`[Finnhub] TSLA quote unavailable: ${message}`)
-    if (FIRESTORE_WRITE_ENABLED) {
-      try {
-        await ref.set({
-          priceSource: 'finnhub',
-          priceStatus: 'error',
-          priceError: message,
-          updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true })
-      } catch (firestoreError) {
-        console.error('[Firestore] Could not record TSLA quote error:', firestoreError)
+    const fallback = await fetchNasdaqStock('TSLA')
+    if (fallback) {
+      result = fallback
+      priceSource = 'nasdaq'
+      console.warn(`[Finnhub] TSLA quote failed; using Nasdaq: ${message}`)
+    } else {
+      console.error(`[Finnhub] TSLA quote unavailable: ${message}`)
+      if (FIRESTORE_WRITE_ENABLED) {
+        try {
+          await ref.set({
+            priceSource: 'finnhub',
+            priceStatus: 'error',
+            priceError: message,
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true })
+        } catch (firestoreError) {
+          console.error('[Firestore] Could not record TSLA quote error:', firestoreError)
+        }
       }
+      return
     }
-    return
   }
 
   const sampledAt = Date.now()
@@ -120,7 +128,7 @@ async function updateTslaPrice() {
     currentPrice: result.price,
     change24h: result.change,
     priceStatus: 'live',
-    priceSource: 'finnhub',
+    priceSource,
     priceUpdatedAt: sampledAt,
     priceError: null,
   }
@@ -129,7 +137,7 @@ async function updateTslaPrice() {
       await ref.set({
         currentPrice: result.price,
         change24h: result.change,
-        priceSource: 'finnhub',
+        priceSource,
         priceStatus: 'live',
         priceError: null,
         priceUpdatedAt: sampledAt,
@@ -358,21 +366,25 @@ async function pollPrices() {
     if (sym === 'TSLA') await updateTslaPrice()
   }
 
-  // Fetch cryptos: FreeCryptoAPI only
+  // Prefer the configured provider, then use the public CoinGecko endpoint.
   for (const sym of Object.keys(CRYPTO_MAP)) {
     let result = null
     if (FREECRYPTO_API_KEY) {
       result = await fetchFreeCrypto(sym)
     }
+    const priceSource = result ? 'freecrypto' : 'coingecko'
     if (!result) {
-      if (!FREECRYPTO_API_KEY) {
-        console.log(`[Poll] No FreeCryptoAPI key for ${sym}, skipping crypto fetch.`)
-      } else {
-        console.log(`[Poll] FreeCrypto fetch failed for ${sym}, using cached price if available.`)
-      }
+      result = await fetchCoinGeckoCrypto(sym)
     }
     if (result) {
-      priceCache[sym] = { currentPrice: result.price, change24h: result.change }
+      priceCache[sym] = {
+        currentPrice: result.price,
+        change24h: result.change,
+        priceStatus: 'live',
+        priceSource,
+        priceUpdatedAt: Date.now(),
+        priceError: null,
+      }
     } else if (priceCache[sym]) {
       console.log(`[Poll] Using cached price for ${sym}`)
     }
@@ -381,6 +393,10 @@ async function pollPrices() {
       batch.set(ref, {
         currentPrice: priceCache[sym].currentPrice,
         change24h: priceCache[sym].change24h,
+        priceStatus: priceCache[sym].priceStatus,
+        priceSource: priceCache[sym].priceSource,
+        priceUpdatedAt: priceCache[sym].priceUpdatedAt,
+        priceError: priceCache[sym].priceError,
         updatedAt: now,
       }, { merge: true })
     }
@@ -417,6 +433,7 @@ async function pollPrices() {
 
 // Schedule price polling every 10 seconds
 cron.schedule('*/10 * * * * *', () => { void pollPrices() })
+void pollPrices()
 setInterval(() => { void refreshPriceHistory() }, HISTORY_REFRESH_MS)
 
 // HTTP routes

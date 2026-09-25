@@ -6,7 +6,7 @@ export function isTslaPriceFresh(asset: Asset | undefined, now = Date.now()): bo
   if (
     !asset ||
     asset.symbol !== 'TSLA' ||
-    asset.priceSource !== 'finnhub' ||
+    (asset.priceSource !== 'finnhub' && asset.priceSource !== 'nasdaq') ||
     asset.priceStatus !== 'live' ||
     !Number.isFinite(asset.currentPrice) ||
     asset.currentPrice <= 0 ||

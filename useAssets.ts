@@ -14,6 +14,15 @@ const DEFAULT_ASSETS: Asset[] = [
   { symbol: 'USDT', name: 'Tether', type: 'crypto', priceSource: 'seeded', currentPrice: 1.0, change24h: 0 },
 ]
 
+type PriceResponse = Record<string, {
+  currentPrice: number
+  change24h: number
+  priceStatus?: Asset['priceStatus']
+  priceUpdatedAt?: number
+  priceSource?: Asset['priceSource']
+  priceError?: string | null
+}>
+
 export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: string | null; now: number } {
   const [assets, setAssets] = useState<Asset[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -28,28 +37,23 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
         const host = window.location.hostname
         const endpoints = configuredApi
           ? [`${configuredApi}/prices`]
-          : [`http://${host}:3001/prices`, '/prices']
-        let res: Response | null = null
+          : window.location.protocol === 'https:'
+            ? ['/prices']
+            : [`http://${host}:3001/prices`, '/prices']
+        let data: PriceResponse | null = null
         for (const endpoint of endpoints) {
           try {
             const candidate = await fetch(endpoint)
-            if (candidate.ok) {
-              res = candidate
-              break
-            }
+            if (!candidate.ok) continue
+            const payload = await candidate.json()
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue
+            data = payload as PriceResponse
+            break
           } catch {
             // Try the next configured endpoint.
           }
         }
-        if (!res) return
-        const data = await res.json() as Record<string, {
-          currentPrice: number
-          change24h: number
-          priceStatus?: Asset['priceStatus']
-          priceUpdatedAt?: number
-          priceSource?: Asset['priceSource']
-          priceError?: string | null
-        }>
+        if (!data) return
         if (!mounted) return
         setAssets((prev) => {
           // If we have Firestore-provided assets, merge prices in
