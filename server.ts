@@ -266,7 +266,11 @@ async function pollPrices() {
     }
     if (priceCache[sym]) {
       const ref = db.collection('assets').doc(sym)
-      batch.update(ref, { currentPrice: priceCache[sym].currentPrice, change24h: priceCache[sym].change24h, updatedAt: now })
+      batch.set(ref, {
+        currentPrice: priceCache[sym].currentPrice,
+        change24h: priceCache[sym].change24h,
+        updatedAt: now,
+      }, { merge: true })
     }
   }
 
@@ -277,7 +281,11 @@ async function pollPrices() {
     const change = parseFloat(((price - prev) / prev * 100).toFixed(3))
     priceCache[sym] = { currentPrice: price, change24h: change }
     const ref = db.collection('assets').doc(sym)
-    batch.update(ref, { currentPrice: price, change24h: change, updatedAt: now })
+    batch.set(ref, {
+      currentPrice: price,
+      change24h: change,
+      updatedAt: now,
+    }, { merge: true })
   }
 
   try {
