@@ -19,6 +19,42 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now())
 
+  // Poll backend /prices to get live prices (falls back to Firestore if available)
+  useEffect(() => {
+    let mounted = true
+    async function fetchPrices() {
+      try {
+        const host = window.location.hostname
+        const res = await fetch(`http://${host}:3001/prices`)
+        if (!res.ok) return
+        const data = await res.json() as Record<string, { currentPrice: number; change24h: number }>
+        if (!mounted) return
+        setAssets((prev) => {
+          // If we have Firestore-provided assets, merge prices in
+          if (prev && prev.length > 0) {
+            return prev.map((a) => {
+              const p = data[a.symbol]
+              return p ? { ...a, currentPrice: p.currentPrice, change24h: p.change24h } : a
+            })
+          }
+          // Otherwise seed defaults and apply prices where available
+          const seeded = DEFAULT_ASSETS.map((a) => {
+            const p = data[a.symbol]
+            return p ? { ...a, currentPrice: p.currentPrice, change24h: p.change24h } : a
+          })
+          return seeded
+        })
+      } catch (e) {
+        // ignore network errors — server may be down
+      }
+    }
+
+    // Initial fetch + interval
+    fetchPrices()
+    const id = setInterval(fetchPrices, 5000)
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
+
   useEffect(() => {
     const unsub = onAssets((nextAssets) => {
       setAssets(nextAssets)

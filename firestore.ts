@@ -20,6 +20,7 @@ import {
 import { User } from 'firebase/auth'
 import { db } from './firebase'
 import type { UserDoc, Balance, Transaction, Holding, Order, Asset, PriceCandle, PriceResolution } from './types'
+import type { OrderType } from './types'
 
 function toDate(val: unknown): Date | null {
   if (!val) return null
@@ -197,29 +198,48 @@ export async function createWithdrawalRequest(uid: string, userName: string, amo
   })
 }
 
-export async function placeBuyOrder(uid: string, userName: string, symbol: string, name: string, units: number, price: number) {
-  const total = units * price
+export interface AdvancedOrderOptions {
+  orderType: OrderType
+  leverage: number
+  limitPrice?: number
+  stopPrice?: number
+  expiresAt?: Date | null
+}
+
+export async function placeBuyOrder(
+  uid: string,
+  userName: string,
+  symbol: string,
+  name: string,
+  units: number,
+  price: number,
+  opts: AdvancedOrderOptions = { orderType: 'market', leverage: 1 }
+) {
+  const effectivePrice = opts.orderType === 'market' ? price : (opts.limitPrice || price)
+  const total = units * effectivePrice * (opts.leverage || 1)
+  const marginRequired = total / (opts.leverage || 1)
+
   await runTransaction(db, async (tx) => {
     const balRef = doc(db, 'balances', uid)
     const balSnap = await tx.get(balRef)
     if (!balSnap.exists()) throw new Error('Balance not found')
     const bal = balSnap.data() as Balance
-    if (bal.available < total) throw new Error('Insufficient balance')
+    if (bal.available < marginRequired) throw new Error('Insufficient balance')
 
     const holdingRef = doc(db, 'holdings', uid, 'assets', symbol)
     const holdingSnap = await tx.get(holdingRef)
 
     let newUnits = units
-    let newAvgBuy = price
+    let newAvgBuy = effectivePrice
     if (holdingSnap.exists()) {
       const h = holdingSnap.data() as Holding
       const totalUnits = h.units + units
-      newAvgBuy = (h.avgBuyPrice * h.units + price * units) / totalUnits
+      newAvgBuy = (h.avgBuyPrice * h.units + effectivePrice * units) / totalUnits
       newUnits = totalUnits
     }
 
     tx.update(balRef, {
-      available: bal.available - total,
+      available: bal.available - marginRequired,
       updatedAt: serverTimestamp(),
     })
     tx.set(holdingRef, {
@@ -237,16 +257,32 @@ export async function placeBuyOrder(uid: string, userName: string, symbol: strin
       symbol,
       name,
       side: 'buy',
+      orderType: opts.orderType,
+      leverage: opts.leverage,
       units,
-      priceAtOrder: price,
+      priceAtOrder: effectivePrice,
+      ...(opts.limitPrice != null ? { limitPrice: opts.limitPrice } : {}),
+      ...(opts.stopPrice != null ? { stopPrice: opts.stopPrice } : {}),
+      ...(opts.expiresAt != null ? { expiresAt: Timestamp.fromDate(opts.expiresAt) } : {}),
+      status: 'filled',
       total,
       createdAt: serverTimestamp(),
     })
   })
 }
 
-export async function placeSellOrder(uid: string, userName: string, symbol: string, name: string, units: number, price: number) {
-  const total = units * price
+export async function placeSellOrder(
+  uid: string,
+  userName: string,
+  symbol: string,
+  name: string,
+  units: number,
+  price: number,
+  opts: AdvancedOrderOptions = { orderType: 'market', leverage: 1 }
+) {
+  const effectivePrice = opts.orderType === 'market' ? price : (opts.limitPrice || price)
+  const total = units * effectivePrice
+
   await runTransaction(db, async (tx) => {
     const balRef = doc(db, 'balances', uid)
     const balSnap = await tx.get(balRef)
@@ -279,8 +315,14 @@ export async function placeSellOrder(uid: string, userName: string, symbol: stri
       symbol,
       name,
       side: 'sell',
+      orderType: opts.orderType,
+      leverage: opts.leverage,
       units,
-      priceAtOrder: price,
+      priceAtOrder: effectivePrice,
+      ...(opts.limitPrice != null ? { limitPrice: opts.limitPrice } : {}),
+      ...(opts.stopPrice != null ? { stopPrice: opts.stopPrice } : {}),
+      ...(opts.expiresAt != null ? { expiresAt: Timestamp.fromDate(opts.expiresAt) } : {}),
+      status: 'filled',
       total,
       createdAt: serverTimestamp(),
     })

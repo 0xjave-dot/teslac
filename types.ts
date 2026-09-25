@@ -64,15 +64,23 @@ export interface Holding {
   updatedAt?: Date | null
 }
 
+export type OrderType = 'market' | 'limit' | 'stop' | 'stop-limit'
+
 export interface Order {
   id: string
   userId: string
   symbol: string
   name: string
   side: 'buy' | 'sell'
+  orderType: OrderType
   units: number
   priceAtOrder: number
+  limitPrice?: number
+  stopPrice?: number
+  leverage: number
   total: number
+  status: 'filled' | 'pending' | 'cancelled'
+  expiresAt?: Date | null
   createdAt: Date | null
 }
 

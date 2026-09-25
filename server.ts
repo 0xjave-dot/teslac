@@ -19,12 +19,19 @@ try {
   console.log('[Server] No service-account.json found — using Application Default Credentials')
 }
 
+const projectId = process.env.FIREBASE_PROJECT_ID || 'tesla-3863b'
+
 if (!getApps().length) {
-  initializeApp(
-    serviceAccount
-      ? { credential: cert(serviceAccount), projectId: process.env.FIREBASE_PROJECT_ID }
-      : { credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID }
-  )
+  if (serviceAccount) {
+    initializeApp({ credential: cert(serviceAccount), projectId })
+  } else {
+    try {
+      initializeApp({ credential: applicationDefault(), projectId })
+    } catch {
+      console.log('[Server] Application Default Credentials failed. Initializing with Project ID only.')
+      initializeApp({ projectId })
+    }
+  }
 }
 
 const db = getFirestore()
@@ -33,6 +40,9 @@ app.use(cors())
 app.use(express.json())
 
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY?.trim() || ''
+const MASSIVE_API_KEY = process.env.MASSIVE_API_KEY || ''
+const FREECRYPTO_API_KEY = process.env.FREECRYPTO_API_KEY || ''
+const FIRESTORE_WRITE_ENABLED = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_SERVICE_ACCOUNT)
 const FINNHUB_STOCKS = ['TSLA']
 const HISTORY_REFRESH_MS = 6 * 60 * 60 * 1000
 const STOCK_HISTORY = [
@@ -232,6 +242,80 @@ async function fetchCoinGeckoCrypto(symbol: string): Promise<{ price: number; ch
   }
 }
 
+async function fetchFreeCrypto(symbol: string): Promise<{ price: number; change: number } | null> {
+  if (!FREECRYPTO_API_KEY) return null
+  try {
+    const url = `https://api.freecryptoapi.com/v1/getData?symbol=${encodeURIComponent(symbol)}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${FREECRYPTO_API_KEY}` } })
+    if (!res.ok) {
+      const text = await res.text()
+      console.error(`[FreeCryptoAPI] HTTP ${res.status} for ${symbol}: ${text.slice(0, 200)}`)
+      return null
+    }
+    const data = await res.json() as any
+    const maybe = data?.symbols?.[0] || data?.result || data?.data || data
+    const price = maybe?.last || maybe?.price || maybe?.close || maybe?.last_price || maybe?.currentPrice
+    const change = maybe?.daily_change_percentage || maybe?.change24h || maybe?.percent_change_24h || 0
+    if (price == null || Number.isNaN(Number(price))) return null
+    return { price: Number(price), change: Number(change || 0) }
+  } catch (e) {
+    console.error(`[FreeCryptoAPI] Error fetching ${symbol}:`, e)
+    return null
+  }
+}
+
+async function fetchMassiveStock(symbol: string): Promise<{ price: number; change: number } | null> {
+  if (!MASSIVE_API_KEY) return null
+  const candidates = [
+    `https://api.massive.com/v2/last/nbbo/${encodeURIComponent(symbol)}`,
+    `https://api.massive.com/v2/last/nbbo/${encodeURIComponent(symbol)}?apiKey=${encodeURIComponent(MASSIVE_API_KEY)}`,
+  ]
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${MASSIVE_API_KEY}`, Accept: 'application/json' } })
+      if (!res.ok) {
+        const text = await res.text()
+        console.error(`[Massive] HTTP ${res.status} for ${symbol} at ${url}: ${text.slice(0, 200)}`)
+        continue
+      }
+      const data = await res.json() as any
+      const maybe = data?.results || data?.ticker || data
+      const price = maybe?.P || maybe?.p || maybe?.last || maybe?.close || maybe?.c || maybe?.currentPrice
+      const change = maybe?.todaysChangePerc || maybe?.daily_change_percentage || maybe?.change24h || maybe?.percent_change_24h || 0
+      if (price == null || Number.isNaN(Number(price))) continue
+      return { price: Number(price), change: Number(change || 0) }
+    } catch (e) {
+      console.error(`[Massive] Error trying ${url} for ${symbol}:`, e)
+      continue
+    }
+  }
+  return null
+}
+
+async function fetchNasdaqStock(symbol: string): Promise<{ price: number; change: number } | null> {
+  try {
+    const url = `https://api.nasdaq.com/api/quote/${symbol}/info?assetclass=stocks`
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        Accept: 'application/json, text/plain, */*',
+      },
+    })
+    if (!res.ok) { console.error(`[Nasdaq] HTTP ${res.status} for ${symbol}`); return null }
+    const json = await res.json() as any
+    const data = json?.data?.primaryData
+    if (!data || typeof data.lastSalePrice !== 'string') return null
+    const rawPrice = data.lastSalePrice.replace(/[^0-9.-]+/g, '')
+    const price = parseFloat(rawPrice)
+    const change = typeof data.percentageChange === 'string' ? parseFloat(data.percentageChange.replace('%', '')) : 0
+    if (!Number.isFinite(price)) return null
+    return { price, change: Number.isFinite(change) ? change : 0 }
+  } catch (e) {
+    console.error(`[Nasdaq] Error fetching stock ${symbol}:`, e)
+    return null
+  }
+}
+
 function simulatePrice(symbol: string): number {
   if (symbol === 'USDT') return 1.00
   const seeded = SEEDED[symbol]
@@ -256,9 +340,19 @@ async function pollPrices() {
     if (sym === 'TSLA') await updateTslaPrice()
   }
 
-  // Fetch cryptos (Finnhub if key present, otherwise CoinGecko)
+  // Fetch cryptos: FreeCryptoAPI only
   for (const sym of Object.keys(CRYPTO_MAP)) {
-    const result = FINNHUB_API_KEY ? await fetchFinnhubCrypto(sym) : await fetchCoinGeckoCrypto(sym)
+    let result = null
+    if (FREECRYPTO_API_KEY) {
+      result = await fetchFreeCrypto(sym)
+    }
+    if (!result) {
+      if (!FREECRYPTO_API_KEY) {
+        console.log(`[Poll] No FreeCryptoAPI key for ${sym}, skipping crypto fetch.`)
+      } else {
+        console.log(`[Poll] FreeCrypto fetch failed for ${sym}, using cached price if available.`)
+      }
+    }
     if (result) {
       priceCache[sym] = { currentPrice: result.price, change24h: result.change }
     } else if (priceCache[sym]) {
@@ -281,9 +375,13 @@ async function pollPrices() {
   }
 
   try {
-    await batch.commit()
-    lastUpdate = ts
-    console.log(`[${ts}] Prices updated`)
+    if (FIRESTORE_WRITE_ENABLED) {
+      await batch.commit()
+      lastUpdate = ts
+      console.log(`[${ts}] Prices updated`)
+    } else {
+      console.log(`[${ts}] Prices fetched; Firestore write disabled because no service account credentials are configured.`)
+    }
   } catch (e) {
     console.error('[Poll] Batch commit failed:', e)
   } finally {
@@ -304,9 +402,197 @@ app.get('/prices', (_req, res) => {
   res.json(priceCache)
 })
 
+const YAHOO_MAP: Record<string, string> = {
+  TSLA: 'TSLA',
+  BTC: 'BTC-USD',
+  ETH: 'ETH-USD',
+  SOL: 'SOL-USD',
+  BNB: 'BNB-USD',
+  USDT: 'USDT-USD',
+}
+
+function seededRandom(seed: number) {
+  const x = Math.sin(seed) * 10000
+  return x - Math.floor(x)
+}
+
+function generateSimulatedChart(symbol: string, timeframe: string, currentPrice: number) {
+  const data = []
+  const now = Date.now()
+  let points = 60
+  let interval = 60000 // 1 min
+  let vol = 0.001
+
+  if (timeframe === '1H') {
+    points = 30
+    interval = 120000 // 2 min
+    vol = 0.001
+  } else if (timeframe === '1D') {
+    points = 96
+    interval = 900000 // 15 min
+    vol = 0.002
+  } else if (timeframe === '1W') {
+    points = 168
+    interval = 3600000 // 1 hour
+    vol = 0.005
+  } else if (timeframe === '1M') {
+    points = 30
+    interval = 86400000 // 1 day
+    vol = 0.015
+  }
+
+  const timeKey = Math.floor(now / (interval * 5))
+  let seed = 0
+  for (let i = 0; i < symbol.length; i++) {
+    seed += symbol.charCodeAt(i)
+  }
+  seed += timeKey
+
+  let price = currentPrice || 100
+  for (let i = points; i >= 0; i--) {
+    const rand = seededRandom(seed - i)
+    const change = (rand - 0.495) * vol
+    price = price / (1 + change)
+  }
+
+  price = currentPrice || 100
+  for (let i = 0; i <= points; i++) {
+    const rand = seededRandom(seed - i)
+    const change = (rand - 0.495) * vol
+    const open = price
+    price = price * (1 + change)
+    const close = price
+
+    const wickVol = vol * 1.5
+    const high = Math.max(open, close) * (1 + seededRandom(seed + i) * wickVol)
+    const low = Math.min(open, close) * (1 - seededRandom(seed - i - 1) * wickVol)
+
+    const date = new Date(now - (points - i) * interval)
+    let timeStr = ''
+    if (timeframe === '1H' || timeframe === '1D') {
+      timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } else if (timeframe === '1W') {
+      timeStr = date.toLocaleDateString([], { weekday: 'short', hour: '2-digit' })
+    } else {
+      timeStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+    }
+
+    data.push({
+      time: timeStr,
+      price: parseFloat(close.toFixed(2)),
+      open: parseFloat(open.toFixed(2)),
+      high: parseFloat(high.toFixed(2)),
+      low: parseFloat(low.toFixed(2)),
+      close: parseFloat(close.toFixed(2))
+    })
+  }
+  return data
+}
+
+app.get('/historical/:symbol', async (req, res) => {
+  const { symbol } = req.params
+  const timeframe = (req.query.timeframe as string) || '1D'
+
+  try {
+    const yahooSymbol = YAHOO_MAP[symbol]
+    if (!yahooSymbol) {
+      const currentPrice = priceCache[symbol]?.currentPrice || SEEDED[symbol]?.price || 100
+      const data = generateSimulatedChart(symbol, timeframe, currentPrice)
+      return res.json(data)
+    }
+
+    let range = '1d'
+    let interval = '5m'
+
+    if (timeframe === '1H') {
+      range = '1d'
+      interval = '2m'
+    } else if (timeframe === '1D') {
+      range = '1d'
+      interval = '5m'
+    } else if (timeframe === '1W') {
+      range = '7d'
+      interval = '1h'
+    } else if (timeframe === '1M') {
+      range = '1mo'
+      interval = '1d'
+    }
+
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?range=${range}&interval=${interval}`
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    })
+
+    if (!response.ok) {
+      console.error(`[Yahoo] HTTP ${response.status} for ${symbol}`)
+      const currentPrice = priceCache[symbol]?.currentPrice || 100
+      const data = generateSimulatedChart(symbol, timeframe, currentPrice)
+      return res.json(data)
+    }
+
+    const data = await response.json() as any
+    const result = data?.chart?.result?.[0]
+    if (!result) {
+      throw new Error('Invalid Yahoo response format')
+    }
+
+    const timestamps = result.timestamp || []
+    const quotes = result.indicators?.quote?.[0]?.close || []
+    const opens = result.indicators?.quote?.[0]?.open || []
+    const highs = result.indicators?.quote?.[0]?.high || []
+    const lows = result.indicators?.quote?.[0]?.low || []
+
+    const chartPoints = []
+    const nowSec = Math.floor(Date.now() / 1000)
+    const oneHourAgo = nowSec - 3600
+
+    for (let i = 0; i < timestamps.length; i++) {
+      const close = quotes[i]
+      if (close === null || close === undefined) continue
+
+      const open = opens[i] !== null && opens[i] !== undefined ? opens[i] : close
+      const high = highs[i] !== null && highs[i] !== undefined ? highs[i] : Math.max(open, close)
+      const low = lows[i] !== null && lows[i] !== undefined ? lows[i] : Math.min(open, close)
+
+      if (timeframe === '1H' && timestamps[i] < oneHourAgo) continue
+
+      const date = new Date(timestamps[i] * 1000)
+      let timeStr = ''
+      if (timeframe === '1H' || timeframe === '1D') {
+        timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      } else if (timeframe === '1W') {
+        timeStr = date.toLocaleDateString([], { weekday: 'short', hour: '2-digit' })
+      } else {
+        timeStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+      }
+
+      chartPoints.push({
+        time: timeStr,
+        price: parseFloat(close.toFixed(2)),
+        open: parseFloat(open.toFixed(2)),
+        high: parseFloat(high.toFixed(2)),
+        low: parseFloat(low.toFixed(2)),
+        close: parseFloat(close.toFixed(2))
+      })
+    }
+
+    res.json(chartPoints)
+  } catch (error) {
+    console.error(`[Historical] Error fetching ${symbol}:`, error)
+    const currentPrice = priceCache[symbol]?.currentPrice || 100
+    const data = generateSimulatedChart(symbol, timeframe, currentPrice)
+    res.json(data)
+  }
+})
+
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`[Server] Running on port ${PORT}`)
+  console.log(`[Server] FIRESTORE_WRITE_ENABLED=${FIRESTORE_WRITE_ENABLED}`)
+  console.log(`[Server] MASSIVE_API_KEY=${MASSIVE_API_KEY ? 'set' : 'missing'}`)
+  console.log(`[Server] FREECRYPTO_API_KEY=${FREECRYPTO_API_KEY ? 'set' : 'missing'}`)
   console.log(`[Server] Starting initial price poll...`)
   void pollPrices()
   void refreshPriceHistory()
