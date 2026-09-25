@@ -1,16 +1,9 @@
 import { Link } from 'react-router-dom'
-import { AreaChart, Area, ResponsiveContainer } from 'recharts'
 import { Logo } from './Logo'
-
-const mockChartData = Array.from({ length: 30 }, (_, i) => ({
-  v: 180 + Math.sin(i * 0.4) * 20 + Math.random() * 10,
-}))
-
-const mockTickers = [
-  { symbol: 'TSLA', name: 'Tesla Inc.', price: '$248.42', change: '+3.21%', positive: true },
-  { symbol: 'BTC', name: 'Bitcoin', price: '$67,420', change: '+1.84%', positive: true },
-  { symbol: 'ETH', name: 'Ethereum', price: '$3,521', change: '-0.62%', positive: false },
-]
+import { useAssets } from './useAssets'
+import { isTslaPriceFresh } from './priceUtils'
+import { StockPriceChart } from './StockPriceChart'
+import { PriceChange } from './PriceChange'
 
 const steps = [
   {
@@ -34,6 +27,10 @@ const steps = [
 ]
 
 export function Landing() {
+  const { priceMap, now } = useAssets()
+  const tslaAsset = priceMap.TSLA
+  const tslaLive = isTslaPriceFresh(tslaAsset, now)
+
   return (
     <div className="bg-[#F8F9FC] min-h-screen">
       {/* Navbar */}
@@ -102,42 +99,39 @@ export function Landing() {
         {/* Right visual */}
         <div className="hidden md:flex items-center justify-center pr-16 py-16">
           <div className="bg-navy-base rounded-3xl shadow-2xl shadow-navy-base/50 p-6 w-80">
-            <p className="text-white/40 text-xs uppercase tracking-wider mb-3">Portfolio</p>
-            <p className="text-white text-2xl font-medium num">$24,831.50</p>
-            <p className="text-gain text-xs mt-1">+$842.30 (+3.51%) today</p>
+            <p className="text-white/40 text-xs uppercase tracking-wider mb-3">TSLA · Market price</p>
+            <p className="text-white text-2xl font-medium num">
+              {tslaLive && tslaAsset ? `$${tslaAsset.currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Unavailable'}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className={`text-xs ${tslaLive ? 'text-gain' : 'text-loss'}`}>
+                {tslaLive ? 'Live quote · refreshes every 10s' : tslaAsset?.priceError || 'Live quote unavailable'}
+              </p>
+              {tslaLive && tslaAsset && <PriceChange value={tslaAsset.change24h} className="text-xs" />}
+            </div>
 
             <div className="mt-4 -mx-2">
-              <ResponsiveContainer width="100%" height={80}>
-                <AreaChart data={mockChartData}>
-                  <defs>
-                    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Area type="monotone" dataKey="v" stroke="#06b6d4" strokeWidth={2} fill="url(#cg)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <StockPriceChart symbol="TSLA" range="1D" asset={tslaAsset || null} now={now} height={80} showAxes={false} />
             </div>
 
             <div className="mt-4 space-y-2.5">
-              {mockTickers.map((t) => (
-                <div key={t.symbol} className="flex items-center justify-between py-2 border-b border-white/[0.06]">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium">
-                      {t.symbol[0]}
-                    </div>
-                    <div>
-                      <p className="text-white text-xs font-medium">{t.symbol}</p>
-                      <p className="text-white/40 text-[10px]">{t.name}</p>
-                    </div>
+              <div className="flex items-center justify-between py-2 border-b border-white/[0.06]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium">
+                    T
                   </div>
-                  <div className="text-right">
-                    <p className="text-white text-xs num">{t.price}</p>
-                    <p className={`text-[10px] num ${t.positive ? 'text-gain' : 'text-loss'}`}>{t.change}</p>
+                  <div>
+                    <p className="text-white text-xs font-medium">TSLA</p>
+                    <p className="text-white/40 text-[10px]">Tesla Inc.</p>
                   </div>
                 </div>
-              ))}
+                <div className="text-right">
+                  <p className="text-white text-xs num">
+                    {tslaLive && tslaAsset ? `$${tslaAsset.currentPrice.toFixed(2)}` : 'Unavailable'}
+                  </p>
+                  {tslaLive && tslaAsset && <PriceChange value={tslaAsset.change24h} className="text-[10px]" />}
+                </div>
+              </div>
             </div>
 
             <button className="mt-4 w-full bg-buy text-navy-base rounded-lg py-2.5 text-sm font-medium hover:bg-buy/90 transition">

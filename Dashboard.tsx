@@ -1,6 +1,4 @@
-import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { AreaChart, Area, ResponsiveContainer } from 'recharts'
 import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import { useAuth } from './AuthContext'
 import { useBalance } from './useBalance'
@@ -10,16 +8,8 @@ import { useTransactions } from './useTransactions'
 import { PriceChange } from './PriceChange'
 import { StatusBadge } from './StatusBadge'
 import { EmptyState } from './EmptyState'
-
-function generateSparkline(seed: number, points = 30) {
-  const data = []
-  let price = seed
-  for (let i = 0; i < points; i++) {
-    price = price * (1 + (Math.random() - 0.5) * 0.02)
-    data.push({ v: price })
-  }
-  return data
-}
+import { StockPriceChart } from './StockPriceChart'
+import { isTslaPriceFresh } from './priceUtils'
 
 function fmt(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -29,15 +19,17 @@ export function Dashboard() {
   const { currentUser } = useAuth()
   const uid = currentUser?.uid
   const balance = useBalance(uid)
-  const { assets, priceMap } = useAssets()
+  const { assets, priceMap, now } = useAssets()
   const holdings = useHoldings(uid)
   const txs = useTransactions(uid, 5)
 
   const tslaAsset = priceMap['TSLA']
-  const tslaPrice = tslaAsset?.currentPrice || 200
-  const sparklineData = useMemo(() => generateSparkline(tslaPrice), [Math.floor(tslaPrice / 10)])
+  const tslaLive = isTslaPriceFresh(tslaAsset, now)
+  const tslaPrice = tslaLive ? tslaAsset!.currentPrice : null
+  const hasUnavailableHolding = holdings.some((holding) => holding.symbol === 'TSLA' && !tslaLive)
 
   const investedValue = holdings.reduce((sum, h) => {
+    if (h.symbol === 'TSLA' && !tslaLive) return sum
     const price = priceMap[h.symbol]?.currentPrice || 0
     return sum + h.units * price
   }, 0)
@@ -45,7 +37,7 @@ export function Dashboard() {
   const costBasis = holdings.reduce((sum, h) => sum + h.units * h.avgBuyPrice, 0)
   const pnl = investedValue - costBasis
   const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0
-  const totalValue = balance.available + investedValue
+  const totalValue = hasUnavailableHolding ? null : balance.available + investedValue
 
   return (
     <div className="space-y-6">
@@ -54,11 +46,16 @@ export function Dashboard() {
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
             <p className="text-white/50 text-xs tracking-widest uppercase mb-2">Total Portfolio Value</p>
-            <p className="text-4xl font-medium tracking-tight num text-white">${fmt(totalValue)}</p>
+            <p className="text-4xl font-medium tracking-tight num text-white">
+              {totalValue === null ? 'Unavailable' : `$${fmt(totalValue)}`}
+            </p>
             <div className="flex items-center gap-2 mt-2">
-              <span className={`text-sm num ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
-                {pnl >= 0 ? '+' : ''}${fmt(Math.abs(pnl))} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
-              </span>
+              {hasUnavailableHolding
+                ? <span className="text-xs text-white/40">Live TSLA price unavailable; portfolio value is not current.</span>
+                : <span className={`text-sm num ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
+                    {pnl >= 0 ? '+' : ''}${fmt(Math.abs(pnl))} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                  </span>
+              }
               <span className="text-white/30 text-xs">all-time P&L</span>
             </div>
           </div>
@@ -69,7 +66,9 @@ export function Dashboard() {
             </div>
             <div>
               <p className="text-xs text-white/50">Invested</p>
-              <p className="text-sm font-medium text-white num mt-1">${fmt(investedValue)}</p>
+              <p className="text-sm font-medium text-white num mt-1">
+                {hasUnavailableHolding ? 'Unavailable' : `$${fmt(investedValue)}`}
+              </p>
             </div>
           </div>
         </div>
@@ -105,22 +104,12 @@ export function Dashboard() {
               <span className="text-white/40 text-xs ml-2">Tesla Inc.</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-white font-medium num">${fmt(tslaPrice)}</span>
-              {tslaAsset && <PriceChange value={tslaAsset.change24h} showIcon className="text-xs" />}
+              <span className="text-white font-medium num">{tslaPrice === null ? 'Unavailable' : `$${fmt(tslaPrice)}`}</span>
+              {tslaLive && tslaAsset && <PriceChange value={tslaAsset.change24h} showIcon className="text-xs" />}
               <Link to="/markets/TSLA" className="text-accent text-xs hover:underline">View →</Link>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={sparklineData}>
-              <defs>
-                <linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area type="monotone" dataKey="v" stroke="#06b6d4" strokeWidth={2} fill="url(#cg2)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <StockPriceChart symbol="TSLA" range="1D" asset={tslaAsset || null} now={now} height={160} showAxes={false} />
         </div>
       </div>
 
@@ -138,8 +127,13 @@ export function Dashboard() {
                 <span className="text-sm font-medium text-white">{asset.symbol}</span>
                 <span className="text-xs text-white/50">{asset.name.split(' ')[0]}</span>
               </div>
-              <p className="text-base num text-white">${fmt(asset.currentPrice)}</p>
-              <PriceChange value={asset.change24h} className="text-xs mt-1" />
+              <p className="text-base num text-white">
+                {asset.symbol === 'TSLA' && !tslaLive ? 'Unavailable' : `$${fmt(asset.currentPrice)}`}
+              </p>
+              {asset.symbol === 'TSLA' && !tslaLive
+                ? <p className="text-xs text-loss mt-1">{asset.priceError || 'Stale or unavailable'}</p>
+                : <PriceChange value={asset.change24h} className="text-xs mt-1" />
+              }
               <div className={`mt-3 h-0.5 rounded-full ${asset.change24h >= 0 ? 'bg-gain' : 'bg-loss'} opacity-60`} />
             </Link>
           ))}

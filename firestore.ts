@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore'
 import { User } from 'firebase/auth'
 import { db } from './firebase'
-import type { UserDoc, Balance, Transaction, Holding, Order, Asset } from './types'
+import type { UserDoc, Balance, Transaction, Holding, Order, Asset, PriceCandle, PriceResolution } from './types'
 
 function toDate(val: unknown): Date | null {
   if (!val) return null
@@ -85,10 +85,28 @@ export function onBalance(uid: string, cb: (b: Balance) => void) {
   })
 }
 
-export function onAssets(cb: (assets: Asset[]) => void) {
+export function onAssets(cb: (assets: Asset[]) => void, onError?: (error: Error) => void) {
   return onSnapshot(collection(db, 'assets'), (snap: QuerySnapshot<DocumentData>) => {
     cb(snap.docs.map((d) => ({ ...d.data(), symbol: d.id } as Asset)))
-  })
+  }, onError)
+}
+
+export function onPriceHistory(
+  symbol: string,
+  resolution: PriceResolution,
+  fromTime: number,
+  cb: (candles: PriceCandle[]) => void,
+  onError?: (error: Error) => void
+) {
+  const historyQuery = query(
+    collection(db, 'priceHistory', symbol, resolution),
+    where('time', '>=', fromTime),
+    orderBy('time', 'asc'),
+    limit(2000)
+  )
+  return onSnapshot(historyQuery, (snap) => {
+    cb(snap.docs.map((d) => d.data() as PriceCandle))
+  }, onError)
 }
 
 export function onTransactions(uid: string, limitN: number, cb: (txs: Transaction[]) => void) {

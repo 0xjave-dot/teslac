@@ -23,6 +23,23 @@ export interface Asset {
   currentPrice: number
   change24h: number
   updatedAt?: Date | null
+  priceStatus?: 'live' | 'error'
+  priceError?: string | null
+  priceUpdatedAt?: number | null
+  historyStatus?: 'ready' | 'loading' | 'error'
+  historyError?: string | null
+  historyUpdatedAt?: number | null
+}
+
+export type PriceResolution = '1m' | '5m' | '15m' | '60m'
+
+export interface PriceCandle {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
 }
 
 export interface Transaction {

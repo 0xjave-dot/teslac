@@ -6,6 +6,7 @@ import { useHoldings } from './useHoldings'
 import { useAssets } from './useAssets'
 import { PriceChange } from './PriceChange'
 import { EmptyState } from './EmptyState'
+import { isTslaPriceFresh } from './priceUtils'
 
 const COLORS = ['#3b7bff', '#06b6d4', '#a855f7', '#f5a623', '#22c55e', '#f43f5e', '#84cc16', '#fb923c']
 
@@ -19,33 +20,38 @@ export function Portfolio() {
   const uid = currentUser?.uid
   const balance = useBalance(uid)
   const holdings = useHoldings(uid)
-  const { priceMap } = useAssets()
+  const { priceMap, now } = useAssets()
 
   const enriched = holdings.map((h) => {
-    const price = priceMap[h.symbol]?.currentPrice || h.avgBuyPrice
-    const value = h.units * price
-    const pnl = (price - h.avgBuyPrice) * h.units
-    const pnlPct = h.avgBuyPrice > 0 ? ((price - h.avgBuyPrice) / h.avgBuyPrice) * 100 : 0
+    const asset = priceMap[h.symbol]
+    const unavailable = h.symbol === 'TSLA' && !isTslaPriceFresh(asset, now)
+    const price = unavailable ? null : asset?.currentPrice || h.avgBuyPrice
+    const value = price === null ? null : h.units * price
+    const pnl = price === null ? null : (price - h.avgBuyPrice) * h.units
+    const pnlPct = price === null || h.avgBuyPrice <= 0 ? null : ((price - h.avgBuyPrice) / h.avgBuyPrice) * 100
     return { ...h, currentPrice: price, value, pnl, pnlPct }
   })
 
-  const totalValue = enriched.reduce((s, h) => s + h.value, 0)
+  const hasUnavailableHolding = enriched.some((holding) => holding.value === null)
+  const totalValue = hasUnavailableHolding ? null : enriched.reduce((s, h) => s + (h.value || 0), 0)
   const totalCost = enriched.reduce((s, h) => s + h.units * h.avgBuyPrice, 0)
-  const totalPnl = totalValue - totalCost
-  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0
+  const totalPnl = totalValue === null ? null : totalValue - totalCost
+  const totalPnlPct = totalPnl === null || totalCost <= 0 ? null : (totalPnl / totalCost) * 100
 
-  const pieData = enriched.map((h) => ({ name: h.symbol, value: h.value }))
+  const pieData = enriched.flatMap((h) => h.value === null ? [] : [{ name: h.symbol, value: h.value }])
 
   return (
     <div className="space-y-6">
       {/* Summary bar */}
       <div className="card p-6 flex gap-8 flex-wrap">
         {[
-          { label: 'Portfolio Value', value: `$${fmt(totalValue)}`, textColor: 'text-white' },
+          { label: 'Portfolio Value', value: totalValue === null ? 'Unavailable' : `$${fmt(totalValue)}`, textColor: 'text-white' },
           {
             label: 'Total P&L',
-            value: `${totalPnl >= 0 ? '+' : ''}$${fmt(Math.abs(totalPnl))} (${totalPnlPct >= 0 ? '+' : ''}${fmt(Math.abs(totalPnlPct))}%)`,
-            textColor: totalPnl >= 0 ? 'text-gain' : 'text-loss',
+            value: totalPnl === null || totalPnlPct === null
+              ? 'Unavailable'
+              : `${totalPnl >= 0 ? '+' : ''}$${fmt(Math.abs(totalPnl))} (${totalPnlPct >= 0 ? '+' : ''}${fmt(Math.abs(totalPnlPct))}%)`,
+            textColor: totalPnl === null ? 'text-white' : totalPnl >= 0 ? 'text-gain' : 'text-loss',
           },
           { label: 'Cash Available', value: `$${fmt(balance.available)}`, textColor: 'text-white' },
           { label: 'Holdings', value: `${holdings.length} assets`, textColor: 'text-white' },
@@ -61,7 +67,9 @@ export function Portfolio() {
         {/* Donut chart */}
         <div className="card p-6">
           <p className="text-sm font-medium text-white mb-4">Allocation</p>
-          {enriched.length === 0 ? (
+          {hasUnavailableHolding ? (
+            <EmptyState message="Portfolio allocation is unavailable until the live TSLA price returns." />
+          ) : enriched.length === 0 ? (
             <EmptyState message="No positions yet. Go to Markets to start trading." />
           ) : (
             <>
@@ -88,7 +96,7 @@ export function Portfolio() {
                   <div key={h.symbol} className="flex items-center gap-2 text-xs text-white/60">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
                     <span className="font-medium text-white">{h.symbol}</span>
-                    <span className="ml-auto">{totalValue > 0 ? ((h.value / totalValue) * 100).toFixed(1) : 0}%</span>
+                    <span className="ml-auto">{totalValue && totalValue > 0 && h.value !== null ? ((h.value / totalValue) * 100).toFixed(1) : 0}%</span>
                   </div>
                 ))}
               </div>
@@ -128,15 +136,18 @@ export function Portfolio() {
                   </div>
                   <span className="num text-sm text-white">{h.units.toFixed(4)}</span>
                   <span className="num text-sm text-white/60">${fmt(h.avgBuyPrice)}</span>
-                  <span className="num text-sm text-white">${fmt(h.currentPrice)}</span>
-                  <div>
-                    <p className={`text-xs font-medium num ${h.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
-                      {h.pnl >= 0 ? '+' : ''}${fmt(Math.abs(h.pnl))}
-                    </p>
-                    <p className={`text-xs num ${h.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
-                      {h.pnlPct >= 0 ? '+' : ''}{fmt(Math.abs(h.pnlPct))}%
-                    </p>
-                  </div>
+                   <span className="num text-sm text-white">{h.currentPrice === null ? 'Unavailable' : `$${fmt(h.currentPrice)}`}</span>
+                   {h.pnl === null || h.pnlPct === null
+                     ? <span className="text-xs text-white/40">Unavailable</span>
+                     : <div>
+                         <p className={`text-xs font-medium num ${h.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
+                           {h.pnl >= 0 ? '+' : ''}${fmt(Math.abs(h.pnl))}
+                         </p>
+                         <p className={`text-xs num ${h.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
+                           {h.pnlPct >= 0 ? '+' : ''}{fmt(Math.abs(h.pnlPct))}%
+                         </p>
+                       </div>
+                   }
                 </div>
               ))}
             </>
