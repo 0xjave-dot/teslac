@@ -100,15 +100,17 @@ async function updateTslaPrice() {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Finnhub quote request failed.'
     console.error(`[Finnhub] TSLA quote unavailable: ${message}`)
-    try {
-      await ref.set({
-        priceSource: 'finnhub',
-        priceStatus: 'error',
-        priceError: message,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true })
-    } catch (firestoreError) {
-      console.error('[Firestore] Could not record TSLA quote error:', firestoreError)
+    if (FIRESTORE_WRITE_ENABLED) {
+      try {
+        await ref.set({
+          priceSource: 'finnhub',
+          priceStatus: 'error',
+          priceError: message,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true })
+      } catch (firestoreError) {
+        console.error('[Firestore] Could not record TSLA quote error:', firestoreError)
+      }
     }
     return
   }
@@ -122,18 +124,20 @@ async function updateTslaPrice() {
     priceUpdatedAt: sampledAt,
     priceError: null,
   }
-  try {
-    await ref.set({
-      currentPrice: result.price,
-      change24h: result.change,
-      priceSource: 'finnhub',
-      priceStatus: 'live',
-      priceError: null,
-      priceUpdatedAt: sampledAt,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true })
-  } catch (error) {
-    console.error('[Firestore] Could not save TSLA quote:', error)
+  if (FIRESTORE_WRITE_ENABLED) {
+    try {
+      await ref.set({
+        currentPrice: result.price,
+        change24h: result.change,
+        priceSource: 'finnhub',
+        priceStatus: 'live',
+        priceError: null,
+        priceUpdatedAt: sampledAt,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+    } catch (error) {
+      console.error('[Firestore] Could not save TSLA quote:', error)
+    }
   }
 }
 

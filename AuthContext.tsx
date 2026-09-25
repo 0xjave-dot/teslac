@@ -24,24 +24,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let settled = false
+    const finishLoading = () => {
+      if (!settled) {
+        settled = true
+        setLoading(false)
+      }
+    }
+    const timeout = window.setTimeout(finishLoading, 5000)
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user)
       if (!user) {
         setUserDoc(null)
-        setLoading(false)
+        finishLoading()
       }
-    })
-    return unsub
+    }, finishLoading)
+    return () => {
+      window.clearTimeout(timeout)
+      unsub()
+    }
   }, [])
 
   useEffect(() => {
     if (!currentUser) return
+    let settled = false
+    const finishLoading = () => {
+      if (!settled) {
+        settled = true
+        setLoading(false)
+      }
+    }
+    const timeout = window.setTimeout(finishLoading, 5000)
     ensureUserDoc(currentUser).catch(() => undefined)
     const unsub = onUserDoc(currentUser.uid, (doc) => {
       setUserDoc(doc)
-      setLoading(false)
-    })
-    return unsub
+      finishLoading()
+    }, finishLoading)
+    return () => {
+      window.clearTimeout(timeout)
+      unsub()
+    }
   }, [currentUser])
 
   const role = userDoc?.role || 'user'
@@ -56,7 +78,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   return useContext(AuthContext)
 }
-
 
 
 

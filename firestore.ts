@@ -71,12 +71,12 @@ export async function updateUserProfile(uid: string, data: Partial<UserDoc>) {
   await setDoc(doc(db, 'users', uid), { ...data, updatedAt: serverTimestamp() }, { merge: true })
 }
 
-export function onUserDoc(uid: string, cb: (u: UserDoc | null) => void) {
+export function onUserDoc(uid: string, cb: (u: UserDoc | null) => void, onError?: (error: Error) => void) {
   return onSnapshot(doc(db, 'users', uid), (snap) => {
     if (!snap.exists()) { cb(null); return }
     const d = snap.data()
     cb({ ...d, uid, createdAt: toDate(d.createdAt) } as UserDoc)
-  })
+  }, onError)
 }
 
 export function onBalance(uid: string, cb: (b: Balance) => void) {

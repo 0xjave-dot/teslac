@@ -24,9 +24,24 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
     let mounted = true
     async function fetchPrices() {
       try {
+        const configuredApi = import.meta.env.VITE_PRICE_API_URL?.replace(/\/$/, '')
         const host = window.location.hostname
-        const res = await fetch(`http://${host}:3001/prices`)
-        if (!res.ok) return
+        const endpoints = configuredApi
+          ? [`${configuredApi}/prices`]
+          : [`http://${host}:3001/prices`, '/prices']
+        let res: Response | null = null
+        for (const endpoint of endpoints) {
+          try {
+            const candidate = await fetch(endpoint)
+            if (candidate.ok) {
+              res = candidate
+              break
+            }
+          } catch {
+            // Try the next configured endpoint.
+          }
+        }
+        if (!res) return
         const data = await res.json() as Record<string, {
           currentPrice: number
           change24h: number
