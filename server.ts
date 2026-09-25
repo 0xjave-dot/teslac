@@ -32,8 +32,14 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || ''
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY?.trim() || ''
 const FINNHUB_STOCKS = ['TSLA']
+const HISTORY_REFRESH_MS = 6 * 60 * 60 * 1000
+const STOCK_HISTORY = [
+  { resolution: '1m', providerResolution: '1', durationMs: 24 * 60 * 60 * 1000 },
+  { resolution: '5m', providerResolution: '5', durationMs: 7 * 24 * 60 * 60 * 1000 },
+  { resolution: '15m', providerResolution: '15', durationMs: 30 * 24 * 60 * 60 * 1000 },
+] as const
 const CRYPTO_MAP: Record<string, string> = {
   BTC: 'BINANCE:BTCUSDT',
   ETH: 'BINANCE:ETHUSDT',
@@ -50,17 +56,143 @@ const SEEDED: Record<string, { name: string; price: number; type: string; seed: 
 
 const priceCache: Record<string, { currentPrice: number; change24h: number }> = {}
 let lastUpdate = ''
+let polling = false
 
-async function fetchFinnhubStock(symbol: string): Promise<{ price: number; change: number } | null> {
+async function fetchFinnhubStock(symbol: string): Promise<{ price: number; change: number }> {
+  if (!FINNHUB_API_KEY) throw new Error('FINNHUB_API_KEY is not configured on the price server.')
+
+  const url = new URL('https://finnhub.io/api/v1/quote')
+  url.searchParams.set('symbol', symbol)
+  url.searchParams.set('token', FINNHUB_API_KEY)
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) throw new Error(`Finnhub quote request failed (HTTP ${res.status}).`)
+
+  const data = await res.json() as { c?: number; dp?: number }
+  if (!Number.isFinite(data.c) || (data.c ?? 0) <= 0) {
+    throw new Error('Finnhub returned no current quote for TSLA.')
+  }
+  return { price: data.c as number, change: Number.isFinite(data.dp) ? data.dp as number : 0 }
+}
+
+async function updateTslaPrice() {
+  const ref = db.collection('assets').doc('TSLA')
+  let result: { price: number; change: number }
+
   try {
-    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_API_KEY}`)
-    if (!res.ok) { console.error(`[Finnhub] HTTP ${res.status} for ${symbol}`); return null }
-    const data = await res.json() as { c: number; dp: number }
-    if (!data.c) return null
-    return { price: data.c, change: data.dp || 0 }
-  } catch (e) {
-    console.error(`[Finnhub] Error fetching ${symbol}:`, e)
-    return null
+    result = await fetchFinnhubStock('TSLA')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Finnhub quote request failed.'
+    console.error(`[Finnhub] TSLA quote unavailable: ${message}`)
+    try {
+      await ref.set({
+        priceSource: 'finnhub',
+        priceStatus: 'error',
+        priceError: message,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+    } catch (firestoreError) {
+      console.error('[Firestore] Could not record TSLA quote error:', firestoreError)
+    }
+    return
+  }
+
+  const sampledAt = Date.now()
+  priceCache.TSLA = { currentPrice: result.price, change24h: result.change }
+  try {
+    await ref.set({
+      currentPrice: result.price,
+      change24h: result.change,
+      priceSource: 'finnhub',
+      priceStatus: 'live',
+      priceError: null,
+      priceUpdatedAt: sampledAt,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  } catch (error) {
+    console.error('[Firestore] Could not save TSLA quote:', error)
+  }
+}
+
+async function fetchFinnhubCandles(
+  providerResolution: string,
+  from: number,
+  to: number
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>> {
+  if (!FINNHUB_API_KEY) throw new Error('FINNHUB_API_KEY is not configured on the price server.')
+
+  const url = new URL('https://finnhub.io/api/v1/stock/candle')
+  url.searchParams.set('symbol', 'TSLA')
+  url.searchParams.set('resolution', providerResolution)
+  url.searchParams.set('from', String(from))
+  url.searchParams.set('to', String(to))
+  url.searchParams.set('token', FINNHUB_API_KEY)
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(12000) })
+  if (!res.ok) throw new Error(`Finnhub candle request failed (HTTP ${res.status}).`)
+  const data = await res.json() as {
+    s?: string
+    t?: number[]
+    o?: number[]
+    h?: number[]
+    l?: number[]
+    c?: number[]
+    v?: number[]
+  }
+  if (data.s !== 'ok' || !data.t?.length || !data.o || !data.h || !data.l || !data.c) {
+    throw new Error('Finnhub returned no historical candles for TSLA.')
+  }
+
+  return data.t.flatMap((time, index) => {
+    const open = data.o?.[index]
+    const high = data.h?.[index]
+    const low = data.l?.[index]
+    const close = data.c?.[index]
+    const volume = data.v?.[index]
+    if (![time, open, high, low, close].every(Number.isFinite)) return []
+    return [{
+      time: time * 1000,
+      open: open as number,
+      high: high as number,
+      low: low as number,
+      close: close as number,
+      volume: Number.isFinite(volume) ? volume as number : 0,
+    }]
+  })
+}
+
+async function refreshPriceHistory() {
+  const assetRef = db.collection('assets').doc('TSLA')
+  try {
+    await assetRef.set({ historyStatus: 'loading', historyError: null }, { merge: true })
+    const now = Math.floor(Date.now() / 1000)
+
+    for (const config of STOCK_HISTORY) {
+      const from = now - Math.floor(config.durationMs / 1000)
+      const candles = await fetchFinnhubCandles(config.providerResolution, from, now)
+      const collectionRef = db.collection('priceHistory').doc('TSLA').collection(config.resolution)
+
+      for (let offset = 0; offset < candles.length; offset += 400) {
+        const batch = db.batch()
+        candles.slice(offset, offset + 400).forEach((candle) => {
+          batch.set(collectionRef.doc(String(candle.time)), candle)
+        })
+        await batch.commit()
+      }
+    }
+
+    await assetRef.set({
+      historyStatus: 'ready',
+      historyError: null,
+      historyUpdatedAt: Date.now(),
+    }, { merge: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Historical TSLA prices could not be refreshed.'
+    console.error(`[Finnhub] TSLA chart history unavailable: ${message}`)
+    try {
+      await assetRef.set({ historyStatus: 'error', historyError: message }, { merge: true })
+    } catch (firestoreError) {
+      console.error('[Firestore] Could not record TSLA history error:', firestoreError)
+    }
   }
 }
 
@@ -100,30 +232,6 @@ async function fetchCoinGeckoCrypto(symbol: string): Promise<{ price: number; ch
   }
 }
 
-async function fetchNasdaqStock(symbol: string): Promise<{ price: number; change: number } | null> {
-  try {
-    const url = `https://api.nasdaq.com/api/quote/${symbol}/info?assetclass=stocks`
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        Accept: 'application/json, text/plain, */*',
-      },
-    })
-    if (!res.ok) { console.error(`[Nasdaq] HTTP ${res.status} for ${symbol}`); return null }
-    const json = await res.json() as any
-    const data = json?.data?.primaryData
-    if (!data || typeof data.lastSalePrice !== 'string') return null
-    const rawPrice = data.lastSalePrice.replace(/[^0-9.-]+/g, '')
-    const price = parseFloat(rawPrice)
-    const change = typeof data.percentageChange === 'string' ? parseFloat(data.percentageChange.replace('%', '')) : 0
-    if (!Number.isFinite(price)) return null
-    return { price, change: Number.isFinite(change) ? change : 0 }
-  } catch (e) {
-    console.error(`[Nasdaq] Error fetching stock ${symbol}:`, e)
-    return null
-  }
-}
-
 function simulatePrice(symbol: string): number {
   if (symbol === 'USDT') return 1.00
   const seeded = SEEDED[symbol]
@@ -137,22 +245,15 @@ function simulatePrice(symbol: string): number {
 }
 
 async function pollPrices() {
+  if (polling) return
+  polling = true
   const batch = db.batch()
   const now = FieldValue.serverTimestamp()
   const ts = new Date().toISOString()
 
-  // Fetch stocks (Finnhub if key present, otherwise Nasdaq public API)
+  // Only TSLA is a real listed stock in the seeded asset set.
   for (const sym of FINNHUB_STOCKS) {
-    const result = FINNHUB_API_KEY ? await fetchFinnhubStock(sym) : await fetchNasdaqStock(sym)
-    if (result) {
-      priceCache[sym] = { currentPrice: result.price, change24h: result.change }
-    } else if (priceCache[sym]) {
-      console.log(`[Poll] Using cached price for ${sym}`)
-    }
-    if (priceCache[sym]) {
-      const ref = db.collection('assets').doc(sym)
-      batch.update(ref, { currentPrice: priceCache[sym].currentPrice, change24h: priceCache[sym].change24h, updatedAt: now })
-    }
+    if (sym === 'TSLA') await updateTslaPrice()
   }
 
   // Fetch cryptos (Finnhub if key present, otherwise CoinGecko)
@@ -185,11 +286,14 @@ async function pollPrices() {
     console.log(`[${ts}] Prices updated`)
   } catch (e) {
     console.error('[Poll] Batch commit failed:', e)
+  } finally {
+    polling = false
   }
 }
 
 // Schedule price polling every 10 seconds
-cron.schedule('*/10 * * * * *', pollPrices)
+cron.schedule('*/10 * * * * *', () => { void pollPrices() })
+setInterval(() => { void refreshPriceHistory() }, HISTORY_REFRESH_MS)
 
 // HTTP routes
 app.get('/health', (_req, res) => {
@@ -204,5 +308,6 @@ const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`[Server] Running on port ${PORT}`)
   console.log(`[Server] Starting initial price poll...`)
-  pollPrices()
+  void pollPrices()
+  void refreshPriceHistory()
 })

@@ -1,9 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer
-} from 'recharts'
 import { ChevronLeft } from 'lucide-react'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
@@ -11,6 +7,8 @@ import { useAuth } from './AuthContext'
 import { useBalance } from './useBalance'
 import { onHoldings, onOrders, placeBuyOrder, placeSellOrder } from './firestore'
 import { PriceChange } from './PriceChange'
+import { StockPriceChart } from './StockPriceChart'
+import { isTslaPriceFresh } from './priceUtils'
 import { EmptyState } from './EmptyState'
 import { Spinner } from './Spinner'
 import { Toast } from './Toast'
@@ -20,29 +18,6 @@ type TimeTab = '1H' | '1D' | '1W' | '1M'
 
 function fmt(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function generateChart(seed: number, points: number, volatility: number) {
-  const data = []
-  let price = seed
-  const now = Date.now()
-  const interval = (points === 60 ? 60000 : points === 144 ? 600000 : points === 168 ? 3600000 : 86400000)
-  for (let i = points; i >= 0; i--) {
-    price = price * (1 + (Math.random() - 0.5) * volatility)
-    data.push({ time: new Date(now - i * interval).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), price: +price.toFixed(2) })
-  }
-  return data
-}
-
-const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: { value: number }[] }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-navy-raised border border-white/[0.13] rounded-lg p-3 text-sm text-white num">
-        ${fmt(payload[0].value)}
-      </div>
-    )
-  }
-  return null
 }
 
 export function MarketDetail() {
@@ -59,6 +34,8 @@ export function MarketDetail() {
   const [tradeLoading, setTradeLoading] = useState(false)
   const [tradeError, setTradeError] = useState('')
   const [toast, setToast] = useState('')
+  const [assetLoadError, setAssetLoadError] = useState('')
+  const [now, setNow] = useState(Date.now())
   const prevPrice = useRef<number | null>(null)
   const [priceFlash, setPriceFlash] = useState<'up' | 'down' | null>(null)
 
@@ -74,9 +51,20 @@ export function MarketDetail() {
         }
         prevPrice.current = newPrice
         setAsset({ ...data, symbol })
+        setAssetLoadError('')
+      } else {
+        setAsset(null)
+        setAssetLoadError(`No market data is available for ${symbol}.`)
       }
+    }, (error) => {
+      setAssetLoadError(error.message || 'Could not load current market data.')
     })
   }, [symbol])
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!uid) return
@@ -87,24 +75,18 @@ export function MarketDetail() {
 
   const holding = holdings.find((h) => h.symbol === symbol)
   const currentPrice = asset?.currentPrice || 0
+  const quoteAvailable = symbol === 'TSLA' ? isTslaPriceFresh(asset || undefined, now) : currentPrice > 0
+  const displayPrice = quoteAvailable ? currentPrice : null
   const unitsNum = parseFloat(units) || 0
-  const total = unitsNum * currentPrice
-
-  const tabConfig: Record<TimeTab, { points: number; vol: number }> = {
-    '1H': { points: 60, vol: 0.001 },
-    '1D': { points: 144, vol: 0.003 },
-    '1W': { points: 168, vol: 0.006 },
-    '1M': { points: 90, vol: 0.012 },
-  }
-
-  const chartData = useMemo(
-    () => generateChart(currentPrice, tabConfig[tab].points, tabConfig[tab].vol),
-    [symbol, tab, Math.floor(currentPrice)]
-  )
+  const total = unitsNum * (displayPrice || 0)
 
   async function handleTrade() {
     if (!uid || !symbol || !asset) return
     setTradeError('')
+    if (!quoteAvailable || !displayPrice) {
+      setTradeError(asset.priceError || 'A current market price is unavailable. Trading is temporarily disabled.')
+      return
+    }
     if (unitsNum <= 0) { setTradeError('Enter a valid number of units'); return }
 
     if (side === 'buy' && balance.available < total) {
@@ -120,9 +102,9 @@ export function MarketDetail() {
     try {
       const name = userDoc?.name || currentUser?.displayName || 'User'
       if (side === 'buy') {
-        await placeBuyOrder(uid, name, symbol, asset.name, unitsNum, currentPrice)
+        await placeBuyOrder(uid, name, symbol, asset.name, unitsNum, displayPrice)
       } else {
-        await placeSellOrder(uid, name, symbol, asset.name, unitsNum, currentPrice)
+        await placeSellOrder(uid, name, symbol, asset.name, unitsNum, displayPrice)
       }
       setToast(`${side === 'buy' ? 'Bought' : 'Sold'} ${unitsNum} ${symbol} successfully!`)
       setUnits('')
@@ -136,7 +118,10 @@ export function MarketDetail() {
   if (!asset) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Spinner size={32} className="text-accent" />
+        {assetLoadError
+          ? <p role="alert" className="text-sm text-loss">{assetLoadError}</p>
+          : <Spinner size={32} className="text-accent" />
+        }
       </div>
     )
   }
@@ -170,21 +155,27 @@ export function MarketDetail() {
                 <span className={`text-4xl font-medium num tracking-tight text-white ${
                   priceFlash === 'up' ? 'price-flash-up' : priceFlash === 'down' ? 'price-flash-down' : ''
                 }`}>
-                  ${fmt(currentPrice)}
+                  {displayPrice === null ? 'Unavailable' : `$${fmt(displayPrice)}`}
                 </span>
-                <PriceChange value={asset.change24h} className="text-lg" showIcon />
-                <span className="text-white/30 text-sm">24h</span>
+                {displayPrice !== null && <PriceChange value={asset.change24h} className="text-lg" showIcon />}
+                {displayPrice !== null && <span className="text-white/30 text-sm">24h</span>}
               </div>
               <div className="flex items-center gap-3 mt-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-gain animate-pulse inline-block" />
-                  <span className="text-xs text-white/40">Live</span>
+                  <span className={`w-2 h-2 rounded-full inline-block ${
+                    symbol === 'TSLA'
+                      ? quoteAvailable ? 'bg-gain animate-pulse' : 'bg-loss'
+                      : 'bg-gain'
+                  }`} />
+                  <span className="text-xs text-white/40">
+                    {symbol === 'TSLA' ? quoteAvailable ? 'Live' : asset.priceError || 'Quote unavailable' : 'Live'}
+                  </span>
                 </div>
                 <span className="text-xs bg-navy-raised px-2 py-0.5 rounded text-white/40 capitalize">
                   {asset.type}
                 </span>
                 <span className="text-xs bg-navy-raised px-2 py-0.5 rounded text-white/40">
-                  {asset.priceSource === 'finnhub' ? 'Finnhub' : 'Simulated'}
+                  {symbol === 'TSLA' ? 'Finnhub' : asset.priceSource === 'finnhub' ? 'Finnhub' : 'Simulated'}
                 </span>
               </div>
             </div>
@@ -205,28 +196,7 @@ export function MarketDetail() {
                 </button>
               ))}
             </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="cg3" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.12} />
-                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                <YAxis
-                  domain={['auto', 'auto']}
-                  tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.3)' }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => `$${v.toFixed(0)}`}
-                  width={60}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="price" stroke="#06b6d4" strokeWidth={2} fill="url(#cg3)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
+              <StockPriceChart symbol={symbol || ''} range={tab} asset={asset} now={now} height={280} showAxes />
           </div>
 
           {/* Order history */}
@@ -299,11 +269,11 @@ export function MarketDetail() {
           <div className="bg-navy-raised rounded-xl p-4 my-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-white/40">Price per unit</span>
-              <span className="text-white num">${fmt(currentPrice)}</span>
+              <span className="text-white num">{displayPrice === null ? 'Unavailable' : `$${fmt(displayPrice)}`}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-white/40">{side === 'buy' ? 'Total cost' : "You'll receive"}</span>
-              <span className="text-white font-medium num">${fmt(total)}</span>
+              <span className="text-white font-medium num">{displayPrice === null ? 'Unavailable' : `$${fmt(total)}`}</span>
             </div>
           </div>
 
@@ -315,7 +285,7 @@ export function MarketDetail() {
 
           <button
             onClick={handleTrade}
-            disabled={tradeLoading}
+            disabled={tradeLoading || !quoteAvailable}
             className={`w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition disabled:opacity-60 ${
               side === 'buy'
                 ? 'bg-buy text-navy-base hover:bg-buy/90'

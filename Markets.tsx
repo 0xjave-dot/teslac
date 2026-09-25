@@ -6,6 +6,7 @@ import { PriceChange } from './PriceChange'
 import { AssetTypeBadge } from './AssetTypeBadge'
 import { EmptyState } from './EmptyState'
 import type { Asset } from './types'
+import { isTslaPriceFresh } from './priceUtils'
 
 function fmt(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -24,7 +25,7 @@ function AssetIcon({ asset }: { asset: Asset }) {
 
 export function Markets() {
   const navigate = useNavigate()
-  const { assets } = useAssets()
+  const { assets, error: assetError, now } = useAssets()
   const [tab, setTab] = useState<'all' | 'stock' | 'crypto'>('all')
   const [search, setSearch] = useState('')
   const prevPrices = useRef<Record<string, number>>({})
@@ -58,7 +59,8 @@ export function Markets() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-medium tracking-tight text-white">Markets</h1>
-        <p className="text-white/40 text-sm mt-1">Live prices updated every 10 seconds</p>
+        <p className="text-white/40 text-sm mt-1">TSLA quotes refresh every 10 seconds.</p>
+        {assetError && <p role="alert" className="text-loss text-xs mt-2">{assetError}</p>}
       </div>
 
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -130,9 +132,14 @@ export function Markets() {
                 flashMap[asset.symbol] === 'up' ? 'price-flash-up' :
                 flashMap[asset.symbol] === 'down' ? 'price-flash-down' : ''
               }`}>
-                ${fmt(asset.currentPrice)}
+                {asset.symbol === 'TSLA' && !isTslaPriceFresh(asset, now)
+                  ? 'Unavailable'
+                  : `$${fmt(asset.currentPrice)}`}
               </span>
-              <PriceChange value={asset.change24h} showIcon />
+              {asset.symbol === 'TSLA' && !isTslaPriceFresh(asset, now)
+                ? <span className="text-xs text-loss">{asset.priceError || 'Stale or unavailable'}</span>
+                : <PriceChange value={asset.change24h} showIcon />
+              }
               <AssetTypeBadge type={asset.type} />
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(`/markets/${asset.symbol}`) }}

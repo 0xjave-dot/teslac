@@ -191,8 +191,9 @@ tesla-invest/
 
 - All balance mutations use Firestore `runTransaction` for atomicity
 - Real-time UI via `onSnapshot` throughout — no polling on the client
-- Price server polls every 10 seconds via `node-cron`
-- Finnhub failures are handled gracefully — cached prices are served
+- Price server polls the TSLA quote every 10 seconds via Finnhub and refreshes historical candles every 6 hours
+- Finnhub errors are recorded on the TSLA asset; the UI marks missing or stale quotes unavailable instead of presenting cached prices as live
+- Historical TSLA candles are stored in Firestore and the charts update from live Firestore quote snapshots without rebuilding the chart
 - Orders are atomic: balance deducted and holdings updated in one transaction
 - Admin approval of deposits atomically updates both the transaction and the user's balance
 - Withdrawal requests lock funds immediately; approval/rejection restores or finalizes them
