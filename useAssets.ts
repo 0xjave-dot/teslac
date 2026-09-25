@@ -27,20 +27,43 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
         const host = window.location.hostname
         const res = await fetch(`http://${host}:3001/prices`)
         if (!res.ok) return
-        const data = await res.json() as Record<string, { currentPrice: number; change24h: number }>
+        const data = await res.json() as Record<string, {
+          currentPrice: number
+          change24h: number
+          priceStatus?: Asset['priceStatus']
+          priceUpdatedAt?: number
+          priceSource?: Asset['priceSource']
+          priceError?: string | null
+        }>
         if (!mounted) return
         setAssets((prev) => {
           // If we have Firestore-provided assets, merge prices in
           if (prev && prev.length > 0) {
             return prev.map((a) => {
               const p = data[a.symbol]
-              return p ? { ...a, currentPrice: p.currentPrice, change24h: p.change24h } : a
+              return p ? {
+                ...a,
+                currentPrice: p.currentPrice,
+                change24h: p.change24h,
+                priceStatus: p.priceStatus || a.priceStatus,
+                priceUpdatedAt: p.priceUpdatedAt || a.priceUpdatedAt,
+                priceSource: p.priceSource || a.priceSource,
+                priceError: p.priceError ?? a.priceError,
+              } : a
             })
           }
           // Otherwise seed defaults and apply prices where available
           const seeded = DEFAULT_ASSETS.map((a) => {
             const p = data[a.symbol]
-            return p ? { ...a, currentPrice: p.currentPrice, change24h: p.change24h } : a
+            return p ? {
+              ...a,
+              currentPrice: p.currentPrice,
+              change24h: p.change24h,
+              priceStatus: p.priceStatus || a.priceStatus,
+              priceUpdatedAt: p.priceUpdatedAt,
+              priceSource: p.priceSource || a.priceSource,
+              priceError: p.priceError ?? a.priceError,
+            } : a
           })
           return seeded
         })
@@ -57,7 +80,12 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
 
   useEffect(() => {
     const unsub = onAssets((nextAssets) => {
-      setAssets(nextAssets)
+      setAssets((prev) => nextAssets.map((asset) => {
+        const live = prev.find((previous) => previous.symbol === asset.symbol)
+        return live?.priceStatus === 'live' && live.priceUpdatedAt
+          ? { ...asset, currentPrice: live.currentPrice, change24h: live.change24h, priceStatus: live.priceStatus, priceUpdatedAt: live.priceUpdatedAt, priceSource: live.priceSource, priceError: live.priceError }
+          : asset
+      }))
       setError(null)
     }, (snapshotError) => {
       setError(snapshotError.message || 'Could not load live asset prices.')

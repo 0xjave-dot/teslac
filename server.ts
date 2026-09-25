@@ -64,7 +64,14 @@ const SEEDED: Record<string, { name: string; price: number; type: string; seed: 
   USDT:   { name: 'Tether', price: 1.00, type: 'crypto', seed: 1.00 },
 }
 
-const priceCache: Record<string, { currentPrice: number; change24h: number }> = {}
+const priceCache: Record<string, {
+  currentPrice: number
+  change24h: number
+  priceStatus?: 'live' | 'error'
+  priceSource?: 'finnhub' | 'seeded'
+  priceUpdatedAt?: number
+  priceError?: string | null
+}> = {}
 let lastUpdate = ''
 let polling = false
 
@@ -107,7 +114,14 @@ async function updateTslaPrice() {
   }
 
   const sampledAt = Date.now()
-  priceCache.TSLA = { currentPrice: result.price, change24h: result.change }
+  priceCache.TSLA = {
+    currentPrice: result.price,
+    change24h: result.change,
+    priceStatus: 'live',
+    priceSource: 'finnhub',
+    priceUpdatedAt: sampledAt,
+    priceError: null,
+  }
   try {
     await ref.set({
       currentPrice: result.price,
