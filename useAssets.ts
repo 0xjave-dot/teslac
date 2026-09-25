@@ -27,6 +27,11 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
   const [assets, setAssets] = useState<Asset[]>([])
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now())
+  const normalizeAsset = (asset: Asset): Asset => ({
+    ...asset,
+    currentPrice: Number.isFinite(asset.currentPrice) ? asset.currentPrice : 0,
+    change24h: Number.isFinite(asset.change24h) ? asset.change24h : 0,
+  })
 
   // Poll backend /prices to get live prices (falls back to Firestore if available)
   useEffect(() => {
@@ -60,7 +65,7 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
           if (prev && prev.length > 0) {
             return prev.map((a) => {
               const p = data[a.symbol]
-              return p ? {
+              return p ? normalizeAsset({
                 ...a,
                 currentPrice: p.currentPrice,
                 change24h: p.change24h,
@@ -68,13 +73,13 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
                 priceUpdatedAt: p.priceUpdatedAt || a.priceUpdatedAt,
                 priceSource: p.priceSource || a.priceSource,
                 priceError: p.priceError ?? a.priceError,
-              } : a
+              }) : normalizeAsset(a)
             })
           }
           // Otherwise seed defaults and apply prices where available
           const seeded = DEFAULT_ASSETS.map((a) => {
             const p = data[a.symbol]
-            return p ? {
+            return p ? normalizeAsset({
               ...a,
               currentPrice: p.currentPrice,
               change24h: p.change24h,
@@ -82,7 +87,7 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
               priceUpdatedAt: p.priceUpdatedAt,
               priceSource: p.priceSource || a.priceSource,
               priceError: p.priceError ?? a.priceError,
-            } : a
+            }) : normalizeAsset(a)
           })
           return seeded
         })
@@ -102,8 +107,8 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
       setAssets((prev) => nextAssets.map((asset) => {
         const live = prev.find((previous) => previous.symbol === asset.symbol)
         return live?.priceStatus === 'live' && live.priceUpdatedAt
-          ? { ...asset, currentPrice: live.currentPrice, change24h: live.change24h, priceStatus: live.priceStatus, priceUpdatedAt: live.priceUpdatedAt, priceSource: live.priceSource, priceError: live.priceError }
-          : asset
+          ? normalizeAsset({ ...asset, currentPrice: live.currentPrice, change24h: live.change24h, priceStatus: live.priceStatus, priceUpdatedAt: live.priceUpdatedAt, priceSource: live.priceSource, priceError: live.priceError })
+          : normalizeAsset(asset)
       }))
       setError(null)
     }, (snapshotError) => {
