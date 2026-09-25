@@ -232,39 +232,27 @@ async function refreshPriceHistory() {
   }
 }
 
-async function fetchFinnhubCrypto(symbol: string): Promise<{ price: number; change: number } | null> {
-  const binanceSym = CRYPTO_MAP[symbol]
-  if (!binanceSym) return null
-  try {
-    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${binanceSym}&token=${FINNHUB_API_KEY}`)
-    if (!res.ok) { console.error(`[Finnhub] HTTP ${res.status} for ${symbol}`); return null }
-    const data = await res.json() as { c: number; dp: number }
-    if (!data.c) return null
-    return { price: data.c, change: data.dp || 0 }
-  } catch (e) {
-    console.error(`[Finnhub] Error fetching crypto ${symbol}:`, e)
-    return null
-  }
-}
-
-async function fetchCoinGeckoCrypto(symbol: string): Promise<{ price: number; change: number } | null> {
+async function fetchCoinGeckoCryptoPrices(symbols: string[]): Promise<Record<string, { price: number; change: number }>> {
   const idMap: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin' }
-  const id = idMap[symbol]
-  if (!id) return null
+  const ids = symbols.map((symbol) => idMap[symbol]).filter(Boolean)
+  if (ids.length === 0) return {}
   try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true`, {
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     })
-    if (!res.ok) { console.error(`[Coingecko] HTTP ${res.status} for ${symbol}`); return null }
+    if (!res.ok) { console.error(`[Coingecko] HTTP ${res.status} for crypto quotes`); return {} }
     const data = await res.json() as any
-    const entry = data[id]
-    if (!entry || typeof entry.usd !== 'number') return null
-    const price = entry.usd
-    const change = typeof entry.usd_24h_change === 'number' ? entry.usd_24h_change : 0
-    return { price, change }
+    return Object.fromEntries(symbols.flatMap((symbol) => {
+      const entry = data[idMap[symbol]]
+      if (!entry || typeof entry.usd !== 'number' || !Number.isFinite(entry.usd) || entry.usd <= 0) return []
+      return [[symbol, {
+        price: entry.usd,
+        change: typeof entry.usd_24h_change === 'number' ? entry.usd_24h_change : 0,
+      }]]
+    }))
   } catch (e) {
-    console.error(`[Coingecko] Error fetching crypto ${symbol}:`, e)
-    return null
+    console.error('[Coingecko] Error fetching crypto quotes:', e)
+    return {}
   }
 }
 
@@ -366,16 +354,21 @@ async function pollPrices() {
     if (sym === 'TSLA') await updateTslaPrice()
   }
 
-  // Prefer the configured provider, then use the public CoinGecko endpoint.
-  for (const sym of Object.keys(CRYPTO_MAP)) {
-    let result = null
-    if (FREECRYPTO_API_KEY) {
-      result = await fetchFreeCrypto(sym)
+  const cryptoSymbols = Object.keys(CRYPTO_MAP)
+  const cryptoResults: Record<string, { price: number; change: number }> = {}
+  if (FREECRYPTO_API_KEY) {
+    for (const sym of cryptoSymbols) {
+      const result = await fetchFreeCrypto(sym)
+      if (result) cryptoResults[sym] = result
     }
-    const priceSource = result ? 'freecrypto' : 'coingecko'
-    if (!result) {
-      result = await fetchCoinGeckoCrypto(sym)
-    }
+  }
+  const missingCryptoSymbols = cryptoSymbols.filter((sym) => !cryptoResults[sym])
+  const coingeckoResults = await fetchCoinGeckoCryptoPrices(missingCryptoSymbols)
+
+  // Prefer the configured provider, then use the batched public fallback.
+  for (const sym of cryptoSymbols) {
+    const result = cryptoResults[sym] || coingeckoResults[sym]
+    const priceSource = cryptoResults[sym] ? 'freecrypto' : 'coingecko'
     if (result) {
       priceCache[sym] = {
         currentPrice: result.price,
