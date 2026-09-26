@@ -572,15 +572,13 @@ function generateSimulatedChart(symbol: string, timeframe: string, currentPrice:
 }
 
 app.get('/historical/:symbol', async (req, res) => {
-  const { symbol } = req.params
+  const symbol = req.params.symbol.toUpperCase()
   const timeframe = (req.query.timeframe as string) || '1D'
 
   try {
     const yahooSymbol = YAHOO_MAP[symbol]
     if (!yahooSymbol) {
-      const currentPrice = priceCache[symbol]?.currentPrice || SEEDED[symbol]?.price || 100
-      const data = generateSimulatedChart(symbol, timeframe, currentPrice)
-      return res.json(data)
+      return res.status(404).json({ error: `No real historical price provider is configured for ${symbol}.` })
     }
 
     let range = '1d'
@@ -609,15 +607,13 @@ app.get('/historical/:symbol', async (req, res) => {
 
     if (!response.ok) {
       console.error(`[Yahoo] HTTP ${response.status} for ${symbol}`)
-      const currentPrice = priceCache[symbol]?.currentPrice || 100
-      const data = generateSimulatedChart(symbol, timeframe, currentPrice)
-      return res.json(data)
+      return res.status(502).json({ error: `Historical price provider returned HTTP ${response.status} for ${symbol}.` })
     }
 
     const data = await response.json() as any
     const result = data?.chart?.result?.[0]
     if (!result) {
-      throw new Error('Invalid Yahoo response format')
+      return res.status(502).json({ error: `Historical price provider returned no data for ${symbol}.` })
     }
 
     const timestamps = result.timestamp || []
@@ -660,12 +656,15 @@ app.get('/historical/:symbol', async (req, res) => {
       })
     }
 
-    res.json(chartPoints)
+    if (chartPoints.length === 0) {
+      return res.status(502).json({ error: `Historical price provider returned no valid candles for ${symbol}.` })
+    }
+
+    console.log(`[Historical] ${symbol} ${timeframe}: ${chartPoints.length} validated candles`)
+    return res.json(chartPoints)
   } catch (error) {
     console.error(`[Historical] Error fetching ${symbol}:`, error)
-    const currentPrice = priceCache[symbol]?.currentPrice || 100
-    const data = generateSimulatedChart(symbol, timeframe, currentPrice)
-    res.json(data)
+    return res.status(502).json({ error: `Could not load real historical prices for ${symbol}.` })
   }
 })
 

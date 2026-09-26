@@ -31,11 +31,6 @@ export function usePriceChart(
     setCandles([])
     setHistoryError(null)
 
-    if (symbol !== 'TSLA') {
-      setLoading(false)
-      return
-    }
-
     let active = true
     let loadingInitial = true
     const loadHistory = async () => {
@@ -61,11 +56,14 @@ export function usePriceChart(
           }]
         })
         if (!active) return
+        console.debug('[PriceChart] received history', { symbol, range, points: points.length, validCandles: nextCandles.length, sample: nextCandles[0] })
         setCandles(nextCandles)
         setHistoryError(null)
       } catch (error) {
         if (!active) return
-        setHistoryError(error instanceof Error ? error.message : 'Could not load historical market prices.')
+        const message = error instanceof Error ? error.message : 'Could not load historical market prices.'
+        console.error('[PriceChart] history request failed', { symbol, range, message })
+        setHistoryError(message)
       } finally {
         if (active && loadingInitial) {
           loadingInitial = false
@@ -85,7 +83,7 @@ export function usePriceChart(
 
   const data = useMemo(() => {
     const source = candles.map((candle) => ({ ...candle }))
-    const isFresh = asset?.symbol === 'TSLA'
+    const isFresh = asset?.symbol === symbol
       && asset.priceStatus === 'live'
       && Number.isFinite(asset.currentPrice)
       && asset.currentPrice > 0
@@ -121,11 +119,11 @@ export function usePriceChart(
   }, [candles, asset, now, range, config.intervalMs])
 
   const quoteAge = typeof asset?.priceUpdatedAt === 'number' ? now - asset.priceUpdatedAt : Number.POSITIVE_INFINITY
-  const quoteWarning = symbol === 'TSLA'
+  const quoteWarning = asset?.symbol === symbol
     ? asset?.priceStatus === 'error'
-      ? asset.priceError || 'The live TSLA quote is unavailable.'
+      ? asset.priceError || `The live ${symbol} quote is unavailable.`
       : asset?.priceStatus !== 'live' || quoteAge > 30_000 || quoteAge < 0
-        ? 'The live TSLA quote is missing or stale.'
+        ? `The live ${symbol} quote is missing or stale.`
         : null
     : null
   const error = historyError || (data.length === 0 ? quoteWarning : null)

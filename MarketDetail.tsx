@@ -1,7 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ResponsiveContainer } from 'recharts'
-import { createChart, IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts'
 import { ChevronLeft, Info } from 'lucide-react'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
@@ -11,7 +9,7 @@ import { useBalance } from './useBalance'
 import { onHoldings, onOrders, placeBuyOrder, placeSellOrder } from './firestore'
 import type { AdvancedOrderOptions } from './firestore'
 import { PriceChange } from './PriceChange'
-import { getPriceApiBase } from './priceUtils'
+import { StockPriceChart } from './StockPriceChart'
 import { AssetLogo } from './AssetLogo'
 import { EmptyState } from './EmptyState'
 import { Spinner } from './Spinner'
@@ -101,7 +99,6 @@ export function MarketDetail() {
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [tab, setTab] = useState<TimeTab>('1D')
-  const [chartType, setChartType] = useState<'line' | 'bar' | 'candlestick'>('line')
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
   const [units, setUnits] = useState('')
   const [orderType, setOrderType] = useState<OrderType>('market')
@@ -114,15 +111,6 @@ export function MarketDetail() {
   const [toast, setToast] = useState('')
   const prevPrice = useRef<number | null>(null)
   const [priceFlash, setPriceFlash] = useState<'up' | 'down' | null>(null)
-
-  const [chartData, setChartData] = useState<Array<{ time: string; price?: number; open?: number; high?: number; low?: number; close?: number }>>([])
-  const [chartLoading, setChartLoading] = useState(false)
-  const [chartError, setChartError] = useState<string | null>(null)
-  const [chartReloadKey, setChartReloadKey] = useState(0)
-  const chartRef = useRef<IChartApi | null>(null)
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const lineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const chartContainerRef = useRef<HTMLDivElement | null>(null)
 
   const { assets, priceMap } = useAssets()
   const assetsRef = useRef(assets)
@@ -190,122 +178,8 @@ export function MarketDetail() {
     return () => { unsub1(); unsub2() }
   }, [uid, symbol])
 
-  useEffect(() => {
-    if (!symbol) return
-    let active = true
-    async function loadChart() {
-      setChartLoading(true)
-      setChartError(null)
-      try {
-        const apiBase = getPriceApiBase()
-        const res = await fetch(`${apiBase}/historical/${symbol}?timeframe=${tab}`)
-        if (!active) return
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          setChartError(`Price server returned ${res.status}` + (text ? `: ${text}` : ''))
-          return
-        }
-        const data = await res.json()
-        setChartData(data)
-      } catch (err: unknown) {
-        console.error('Error loading chart:', err)
-        setChartError(String(err))
-      } finally {
-        if (active) setChartLoading(false)
-      }
-    }
-    loadChart()
-    return () => { active = false }
-  }, [symbol, tab, chartReloadKey])
-
-
   const holding = holdings.find((h) => h.symbol === symbol)
   const currentPrice = asset?.currentPrice || 0
-
-  const displayChartData = useMemo(() => {
-    if (chartData.length === 0) return []
-    const copy = [...chartData]
-    if (currentPrice > 0) {
-      const last = copy[copy.length - 1] || {}
-      copy[copy.length - 1] = {
-        ...last,
-        price: currentPrice,
-        close: currentPrice,
-      }
-    }
-    return copy
-  }, [chartData, currentPrice])
-
-  // Map displayChartData to lightweight-charts datasets with approximate timestamps
-  const lwcSeries = useMemo(() => {
-    if (displayChartData.length === 0) return { candles: [], line: [] }
-    const now = Date.now()
-    let intervalMs = 5 * 60 * 1000
-    if (tab === '1H') intervalMs = 2 * 60 * 1000
-    else if (tab === '1D') intervalMs = 5 * 60 * 1000
-    else if (tab === '1W') intervalMs = 60 * 60 * 1000
-    else if (tab === '1M') intervalMs = 24 * 60 * 60 * 1000
-
-    const n = displayChartData.length
-    const candles: Array<{ time: UTCTimestamp; open: number; high: number; low: number; close: number }> = []
-    const line: Array<{ time: UTCTimestamp; value: number }> = []
-    for (let i = 0; i < n; i++) {
-      const pt = displayChartData[i]
-      const ts = Math.floor((now - (n - 1 - i) * intervalMs) / 1000)
-      const open = (pt.open ?? pt.price ?? pt.close ?? 0)
-      const close = (pt.close ?? pt.price ?? open)
-      const high = pt.high ?? Math.max(open, close)
-      const low = pt.low ?? Math.min(open, close)
-      candles.push({ time: ts as UTCTimestamp, open, high, low, close })
-      line.push({ time: ts as UTCTimestamp, value: pt.price ?? close })
-    }
-    return { candles, line }
-  }, [displayChartData, tab])
-
-  // Create chart once when container mounts
-  useEffect(() => {
-    if (!chartContainerRef.current) return
-    const chart = createChart(chartContainerRef.current, {
-      autoSize: true,
-      layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.9)' },
-      rightPriceScale: { visible: true },
-      timeScale: { timeVisible: true, secondsVisible: false },
-    })
-    chartRef.current = chart
-    candleSeriesRef.current = chart.addCandlestickSeries({ upColor: '#10b981', downColor: '#ef4444', borderVisible: true, wickVisible: true })
-    lineSeriesRef.current = chart.addLineSeries({ color: '#06b6d4', lineWidth: 2 })
-
-    return () => {
-      try { chart.remove() } catch (e) { /* ignore */ }
-      chartRef.current = null
-      candleSeriesRef.current = null
-      lineSeriesRef.current = null
-    }
-  }, [])
-
-  // Update series data and visibility
-  useEffect(() => {
-    if (!chartRef.current) return
-    try {
-      if (candleSeriesRef.current) candleSeriesRef.current.setData(lwcSeries.candles)
-      if (lineSeriesRef.current) lineSeriesRef.current.setData(lwcSeries.line)
-
-      if (chartType === 'candlestick') {
-        candleSeriesRef.current?.applyOptions({ visible: true })
-        lineSeriesRef.current?.applyOptions({ visible: false })
-      } else if (chartType === 'line') {
-        candleSeriesRef.current?.applyOptions({ visible: false })
-        lineSeriesRef.current?.applyOptions({ visible: true })
-      } else {
-        // bar: use line series for now
-        candleSeriesRef.current?.applyOptions({ visible: false })
-        lineSeriesRef.current?.applyOptions({ visible: true })
-      }
-      chartRef.current.timeScale().fitContent()
-    } catch (e) {
-      // ignore chart update errors
-    }
-  }, [lwcSeries, chartType])
 
   const effectivePrice = orderType === 'market' ? currentPrice : (parseFloat(limitPrice) || currentPrice)
   const unitsNum = parseFloat(units) || 0
@@ -428,38 +302,8 @@ export function MarketDetail() {
                   </button>
                 ))}
               </div>
-              <div className="bg-navy-raised rounded-lg p-0.5 flex gap-0.5 border border-white/[0.05]">
-                {(['line', 'bar', 'candlestick'] as const).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setChartType(type)}
-                    className={`px-2.5 py-1 text-xs rounded-md capitalize transition ${
-                      chartType === type
-                        ? 'bg-accent text-white font-medium shadow-sm'
-                        : 'text-white/50 hover:text-white'
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
             </div>
-            {chartError && (
-              <div className="mb-4 text-center text-sm text-white/60">
-                <div>Price server unavailable: {chartError}</div>
-                <div className="mt-2">
-                  <button onClick={() => setChartReloadKey(k => k + 1)} className="px-3 py-1 rounded bg-accent text-white text-xs">Retry</button>
-                </div>
-              </div>
-            )}
-            <div className="w-full" style={{ height: 280 }}>
-              <div ref={(el) => chartContainerRef.current = el} className="w-full h-full" />
-              {chartLoading && chartData.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Spinner size={24} className="text-accent" />
-                </div>
-              )}
-            </div>
+            <StockPriceChart symbol={symbol} range={tab} asset={asset} height={280} />
           </div>
 
           {/* Order history */}
