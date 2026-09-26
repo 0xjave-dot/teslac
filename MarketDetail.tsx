@@ -266,6 +266,7 @@ export function MarketDetail() {
   useEffect(() => {
     if (!chartContainerRef.current) return
     const chart = createChart(chartContainerRef.current, {
+      autoSize: true,
       layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.9)' },
       rightPriceScale: { visible: true },
       timeScale: { timeVisible: true, secondsVisible: false },
