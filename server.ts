@@ -116,6 +116,15 @@ async function updateTslaPrice() {
       console.warn(`[Finnhub] TSLA quote failed; using Nasdaq: ${message}`)
     } else {
       console.error(`[Finnhub] TSLA quote unavailable: ${message}`)
+      const previousQuote = priceCache.TSLA
+      priceCache.TSLA = {
+        currentPrice: previousQuote?.currentPrice || 0,
+        change24h: previousQuote?.change24h || 0,
+        priceStatus: 'error',
+        priceSource: 'finnhub',
+        priceUpdatedAt: previousQuote?.priceUpdatedAt,
+        priceError: message,
+      }
       if (FIRESTORE_WRITE_ENABLED) {
         try {
           await ref.set({
@@ -355,6 +364,7 @@ async function fetchNasdaqStock(symbol: string): Promise<{ price: number; change
         'User-Agent': 'Mozilla/5.0',
         Accept: 'application/json, text/plain, */*',
       },
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) { console.error(`[Nasdaq] HTTP ${res.status} for ${symbol}`); return null }
     const json = await res.json() as any
@@ -386,6 +396,16 @@ function simulatePrice(symbol: string): number {
 async function pollPrices() {
   if (polling) return
   polling = true
+  try {
+    await runPricePolling()
+  } catch (error) {
+    console.error('[Poll] Price polling failed:', error)
+  } finally {
+    polling = false
+  }
+}
+
+async function runPricePolling() {
   const batch = db.batch()
   const now = FieldValue.serverTimestamp()
   const ts = new Date().toISOString()
@@ -465,8 +485,6 @@ async function pollPrices() {
     }
   } catch (e) {
     console.error('[Poll] Batch commit failed:', e)
-  } finally {
-    polling = false
   }
 }
 
