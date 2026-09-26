@@ -119,6 +119,8 @@ async function updateTslaPrice() {
       if (FIRESTORE_WRITE_ENABLED) {
         try {
           await ref.set({
+            name: 'Tesla Inc.',
+            type: 'stock',
             priceSource: 'finnhub',
             priceStatus: 'error',
             priceError: message,
@@ -144,6 +146,8 @@ async function updateTslaPrice() {
   if (FIRESTORE_WRITE_ENABLED) {
     try {
       await ref.set({
+        name: 'Tesla Inc.',
+        type: 'stock',
         currentPrice: result.price,
         change24h: result.change,
         priceSource,
