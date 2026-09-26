@@ -12,11 +12,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Initialize Firebase Admin
 let serviceAccount: any | undefined
-try {
-  const saPath = join(__dirname, 'service-account.json')
-  serviceAccount = JSON.parse(readFileSync(saPath, 'utf-8'))
-} catch {
-  console.log('[Server] No service-account.json found — using Application Default Credentials')
+const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT?.trim()
+if (serviceAccountJson) {
+  try {
+    serviceAccount = JSON.parse(serviceAccountJson)
+  } catch {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT must contain valid service-account JSON.')
+  }
+} else {
+  try {
+    const saPath = join(__dirname, 'service-account.json')
+    serviceAccount = JSON.parse(readFileSync(saPath, 'utf-8'))
+  } catch {
+    console.log('[Server] No service-account.json found — using Application Default Credentials')
+  }
 }
 
 const projectId = process.env.FIREBASE_PROJECT_ID || 'tesla-3863b'

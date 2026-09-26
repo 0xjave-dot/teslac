@@ -3,5 +3,6 @@ dist/
 dist-server/
 .env
 service-account.json
+tesla-3863b-firebase-adminsdk-fbsvc-9b127b86bc.json
 *.local
 .DS_Store
