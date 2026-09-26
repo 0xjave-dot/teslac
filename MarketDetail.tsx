@@ -99,6 +99,7 @@ export function MarketDetail() {
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [tab, setTab] = useState<TimeTab>('1D')
+  const [chartType, setChartType] = useState<'line' | 'candlestick'>('candlestick')
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
   const [units, setUnits] = useState('')
   const [orderType, setOrderType] = useState<OrderType>('market')
@@ -302,8 +303,23 @@ export function MarketDetail() {
                   </button>
                 ))}
               </div>
+              <div className="bg-navy-raised rounded-lg p-0.5 flex gap-0.5 border border-white/[0.05]" role="group" aria-label="Chart type">
+                {(['line', 'candlestick'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setChartType(type)}
+                    aria-pressed={chartType === type}
+                    className={`px-2.5 py-1 text-xs rounded-md capitalize transition ${
+                      chartType === type ? 'bg-accent text-white font-medium' : 'text-white/50 hover:text-white'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
             </div>
-            <StockPriceChart symbol={symbol} range={tab} asset={asset} height={280} />
+            <StockPriceChart symbol={symbol} range={tab} asset={asset} height={280} chartType={chartType} />
           </div>
 
           {/* Order history */}
