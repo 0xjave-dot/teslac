@@ -28,11 +28,18 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
   const [assets, setAssets] = useState<Asset[]>([])
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now())
-  const normalizeAsset = (asset: Asset): Asset => ({
-    ...asset,
-    currentPrice: Number.isFinite(asset.currentPrice) ? asset.currentPrice : 0,
-    change24h: Number.isFinite(asset.change24h) ? asset.change24h : 0,
-  })
+  const normalizeAsset = (asset: Asset): Asset => {
+    const fallback = DEFAULT_ASSETS.find((candidate) => candidate.symbol === asset.symbol)
+    return {
+      ...(fallback ?? {}),
+      ...asset,
+      name: asset.name || fallback?.name || asset.symbol,
+      type: asset.type || fallback?.type || 'stock',
+      priceSource: asset.priceSource || fallback?.priceSource || 'seeded',
+      currentPrice: Number.isFinite(asset.currentPrice) ? asset.currentPrice : 0,
+      change24h: Number.isFinite(asset.change24h) ? asset.change24h : 0,
+    } as Asset
+  }
 
   // Poll backend /prices to get live prices (falls back to Firestore if available)
   useEffect(() => {
