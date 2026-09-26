@@ -146,7 +146,13 @@ export function MarketDetail() {
       if (!active) return
       if (snap.exists()) {
         const data = snap.data() as Asset
-        updateAsset({ ...data, symbol })
+        updateAsset({
+          ...data,
+          symbol,
+          name: data.name || symbol,
+          type: data.type || 'stock',
+          priceSource: data.priceSource || 'finnhub',
+        })
       } else {
         const fallback = assetsRef.current.find((a) => a.symbol === symbol)
         if (fallback) {
@@ -377,7 +383,7 @@ export function MarketDetail() {
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
                   asset.type === 'stock' ? 'bg-accent/20 text-accent' : 'bg-purple-500/20 text-purple-400'
                 }`}>
-                  {asset.name[0]}
+                  {asset.name?.[0] || symbol[0]}
                 </div>
                 <div>
                   <h1 className="text-2xl font-medium tracking-tight text-white">{symbol}</h1>
