@@ -169,7 +169,15 @@ export function MarketDetail() {
       setTimeout(() => setPriceFlash(null), 900)
     }
     prevPrice.current = newPrice
-    setAsset((a) => a ? { ...a, currentPrice: newPrice, change24h: p.change24h } : { symbol, name: symbol, currentPrice: newPrice, change24h: p.change24h, type: 'stock', priceSource: 'finnhub' })
+    setAsset((a) => a ? {
+      ...a,
+      currentPrice: newPrice,
+      change24h: p.change24h,
+      priceStatus: p.priceStatus ?? a.priceStatus,
+      priceUpdatedAt: p.priceUpdatedAt ?? a.priceUpdatedAt,
+      priceSource: p.priceSource ?? a.priceSource,
+      priceError: p.priceError ?? a.priceError,
+    } : { ...p, symbol, name: symbol, currentPrice: newPrice, change24h: p.change24h, type: 'stock', priceSource: 'finnhub' })
   }, [priceMap, symbol])
 
   useEffect(() => {
