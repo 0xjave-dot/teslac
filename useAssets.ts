@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { onAssets } from './firestore'
+import { getPriceApiBase } from './priceUtils'
 import type { Asset, PriceMap } from './types'
 
 const DEFAULT_ASSETS: Asset[] = [
@@ -36,19 +37,16 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
   // Poll backend /prices to get live prices (falls back to Firestore if available)
   useEffect(() => {
     let mounted = true
+    let requestPending = false
     async function fetchPrices() {
+      if (requestPending) return
+      requestPending = true
       try {
-        const configuredApi = import.meta.env.VITE_PRICE_API_URL?.replace(/\/$/, '')
-        const host = window.location.hostname
-        const endpoints = configuredApi
-          ? [`${configuredApi}/prices`]
-          : window.location.protocol === 'https:'
-            ? []
-            : [`http://${host}:3001/prices`, '/prices']
+        const endpoints = [`${getPriceApiBase()}/prices`]
         let data: PriceResponse | null = null
         for (const endpoint of endpoints) {
           try {
-            const candidate = await fetch(endpoint)
+            const candidate = await fetch(endpoint, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
             if (!candidate.ok) continue
             const payload = await candidate.json()
             if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue
@@ -65,7 +63,7 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
           if (prev && prev.length > 0) {
             return prev.map((a) => {
               const p = data[a.symbol]
-              return p ? normalizeAsset({
+              return p && Number.isFinite(p.currentPrice) && p.currentPrice > 0 && Number.isFinite(p.change24h) ? normalizeAsset({
                 ...a,
                 currentPrice: p.currentPrice,
                 change24h: p.change24h,
@@ -79,7 +77,7 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
           // Otherwise seed defaults and apply prices where available
           const seeded = DEFAULT_ASSETS.map((a) => {
             const p = data[a.symbol]
-            return p ? normalizeAsset({
+            return p && Number.isFinite(p.currentPrice) && p.currentPrice > 0 && Number.isFinite(p.change24h) ? normalizeAsset({
               ...a,
               currentPrice: p.currentPrice,
               change24h: p.change24h,
@@ -93,6 +91,8 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
         })
       } catch (e) {
         // ignore network errors — server may be down
+      } finally {
+        requestPending = false
       }
     }
 
@@ -127,8 +127,11 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
     }
   }, [])
 
-  const priceMap: PriceMap = {}
-  assets.forEach((a) => { priceMap[a.symbol] = a })
+  const priceMap = useMemo(() => {
+    const map: PriceMap = {}
+    assets.forEach((asset) => { map[asset.symbol] = asset })
+    return map
+  }, [assets])
 
   return { assets, priceMap, error, now }
 }

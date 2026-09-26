@@ -61,7 +61,7 @@ export function AdminDashboard() {
   return (
     <div className="space-y-6">
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
         {stats.map(({ label, value, icon: Icon, iconColor, sub }) => (
           <div key={label} className="card p-6">
             <div className={`w-10 h-10 rounded-xl bg-navy-raised flex items-center justify-center mb-4`}>
@@ -74,7 +74,7 @@ export function AdminDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
         {/* Pending transactions */}
         <div className="card p-6">
           <div className="flex items-center gap-3 mb-4">

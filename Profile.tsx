@@ -125,7 +125,7 @@ export function Profile() {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
         {/* Personal info */}
         <div className="card p-6">
           <p className="text-sm font-medium text-white mb-6">Personal Information</p>

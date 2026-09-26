@@ -73,7 +73,7 @@ export function Login() {
         <div className="relative z-10 flex flex-col items-center text-center">
           <Logo size="lg" />
           <p className="text-white/50 text-sm mt-3 max-w-[220px] leading-relaxed">
-            Practice trading with live market data. No risk, real experience.
+            
           </p>
           <div className="mt-10 space-y-3 text-left">
             {['Real-time Firestore prices', 'Secure Firebase Auth', 'Instant order execution'].map((t) => (

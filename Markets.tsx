@@ -78,19 +78,19 @@ export function Markets() {
           ))}
         </div>
 
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search assets…"
-            className="bg-navy-raised border border-white/[0.07] rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent/50 w-56"
+            className="bg-navy-raised border border-white/[0.07] rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent/50 w-full sm:w-56"
           />
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
+      <div className="card overflow-x-auto">
+        <div className="min-w-[680px] grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
           <span>Asset</span>
           <span>Price</span>
           <span>24h Change</span>
@@ -100,7 +100,7 @@ export function Markets() {
 
         {loading ? (
           Array.from({ length: 9 }).map((_, i) => (
-            <div key={i} className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center px-6 py-4 border-b border-white/[0.05] gap-4">
+            <div key={i} className="min-w-[680px] grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center px-6 py-4 border-b border-white/[0.05] gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-navy-raised animate-pulse" />
                 <div className="space-y-1.5">
@@ -119,7 +119,7 @@ export function Markets() {
             <div
               key={asset.symbol}
               onClick={() => navigate(`/markets/${asset.symbol}`)}
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/50 cursor-pointer transition"
+              className="min-w-[680px] grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/50 cursor-pointer transition"
             >
               <div className="flex items-center gap-3">
                 <AssetIcon asset={asset} />

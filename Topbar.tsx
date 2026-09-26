@@ -33,8 +33,8 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     .toUpperCase()
 
   return (
-    <header className="h-16 bg-navy-card/80 backdrop-blur-md border-b border-white/[0.07] flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20">
-      <div className="flex items-center gap-4">
+    <header className="h-16 bg-navy-card/80 backdrop-blur-md border-b border-white/[0.07] flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 sticky top-0 z-20">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         <button
           onClick={onMenuClick}
           className="lg:hidden w-10 h-10 rounded-2xl bg-navy-raised border border-white/[0.08] text-white/70 hover:text-white transition"
@@ -42,10 +42,10 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         >
           <Menu className="w-5 h-5" />
         </button>
-        <h1 className="text-white font-medium text-sm tracking-tight">{title}</h1>
+        <h1 className="text-white font-medium text-sm tracking-tight truncate">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-3 relative">
+      <div className="flex items-center gap-2 sm:gap-3 relative flex-shrink-0">
         <button
           onClick={() => setPanelOpen((open) => !open)}
           className="relative w-10 h-10 rounded-2xl bg-navy-raised border border-white/[0.08] text-white/70 hover:text-white transition"
@@ -66,9 +66,9 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           onClear={clearNotifications}
         />
 
-        <div className="bg-navy-raised border border-white/[0.07] rounded-full px-4 py-1.5 text-sm flex items-center gap-2">
-          <Wallet className="w-3.5 h-3.5 text-white/40" />
-          <span className="text-white num">
+        <div className="bg-navy-raised border border-white/[0.07] rounded-full px-2 sm:px-4 py-1.5 text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2">
+          <Wallet className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
+          <span className="text-white num whitespace-nowrap">
             ${balance.available.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </span>
         </div>

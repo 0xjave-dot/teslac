@@ -105,12 +105,12 @@ export function AdminUserDetail() {
       </Link>
 
       {/* Profile card */}
-      <div className="card p-6 mb-6">
-        <div className="flex items-center gap-5">
+      <div className="card p-4 sm:p-6 mb-6 min-w-0">
+        <div className="flex items-center gap-5 flex-wrap">
           <div className="w-14 h-14 rounded-full bg-accent/20 text-accent text-xl font-medium flex items-center justify-center">
             {(user.name || user.email || 'U').slice(0, 2).toUpperCase()}
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <p className="text-xl font-medium text-white">{user.name || 'No name'}</p>
             <p className="text-white/50 text-sm">{user.email}</p>
             <p className="text-white/30 text-xs mt-0.5">{user.country || 'No country'} · Joined {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}</p>
@@ -128,7 +128,7 @@ export function AdminUserDetail() {
       </div>
 
       {/* Balance cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6 min-w-0">
         {[
           { label: 'Available', value: balance.available, color: 'text-white' },
           { label: 'Locked', value: balance.locked, color: 'text-yellow-400' },

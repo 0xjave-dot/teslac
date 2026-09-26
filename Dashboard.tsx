@@ -74,7 +74,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 min-w-0">
         {/* Balance cards */}
         <div className="space-y-4">
           {[
@@ -97,7 +97,7 @@ export function Dashboard() {
         </div>
 
         {/* Chart */}
-        <div className="col-span-2 card p-6">
+        <div className="xl:col-span-2 card p-4 sm:p-6 min-w-0 overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div>
               <span className="font-medium text-white text-sm">TSLA</span>

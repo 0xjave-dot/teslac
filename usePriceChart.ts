@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { getPriceApiBase } from './priceUtils'
 import type { Asset, PriceCandle } from './types'
 
 export type PriceRange = '1H' | '1D' | '1W' | '1M'
@@ -9,8 +10,6 @@ const RANGE_CONFIG: Record<PriceRange, { intervalMs: number }> = {
   '1W': { intervalMs: 60 * 60 * 1000 },
   '1M': { intervalMs: 24 * 60 * 60 * 1000 },
 }
-
-const PRICE_API_URL = import.meta.env.VITE_PRICE_API_URL?.replace(/\/$/, '') || ''
 
 export interface PriceChartPoint extends PriceCandle {
   label: string
@@ -26,6 +25,7 @@ export function usePriceChart(
   const [loading, setLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const config = RANGE_CONFIG[range]
+  const priceApiUrl = getPriceApiBase()
 
   useEffect(() => {
     setCandles([])
@@ -36,17 +36,11 @@ export function usePriceChart(
       return
     }
 
-    if (!PRICE_API_URL) {
-      setHistoryError('VITE_PRICE_API_URL is not configured for this deployment.')
-      setLoading(false)
-      return
-    }
-
     let active = true
     let loadingInitial = true
     const loadHistory = async () => {
       try {
-        const response = await fetch(`${PRICE_API_URL}/historical/${symbol}?timeframe=${range}`)
+        const response = await fetch(`${priceApiUrl}/historical/${symbol}?timeframe=${range}`, { cache: 'no-store', signal: AbortSignal.timeout(12000) })
         if (!response.ok) throw new Error(`Price server returned ${response.status}.`)
         const points = await response.json() as Array<{ price?: number; open?: number; high?: number; low?: number; close?: number }>
         if (!Array.isArray(points)) throw new Error('Price server returned invalid historical data.')
@@ -87,7 +81,7 @@ export function usePriceChart(
       active = false
       window.clearInterval(intervalId)
     }
-  }, [symbol, range, config.intervalMs])
+  }, [symbol, range, config.intervalMs, priceApiUrl])
 
   const data = useMemo(() => {
     const source = candles.map((candle) => ({ ...candle }))

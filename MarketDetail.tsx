@@ -11,6 +11,7 @@ import { useBalance } from './useBalance'
 import { onHoldings, onOrders, placeBuyOrder, placeSellOrder } from './firestore'
 import type { AdvancedOrderOptions } from './firestore'
 import { PriceChange } from './PriceChange'
+import { getPriceApiBase } from './priceUtils'
 import { EmptyState } from './EmptyState'
 import { Spinner } from './Spinner'
 import { Toast } from './Toast'
@@ -123,6 +124,8 @@ export function MarketDetail() {
   const chartContainerRef = useRef<HTMLDivElement | null>(null)
 
   const { assets, priceMap } = useAssets()
+  const assetsRef = useRef(assets)
+  assetsRef.current = assets
 
   useEffect(() => {
     if (!symbol) return
@@ -145,7 +148,7 @@ export function MarketDetail() {
         const data = snap.data() as Asset
         updateAsset({ ...data, symbol })
       } else {
-        const fallback = assets.find((a) => a.symbol === symbol)
+        const fallback = assetsRef.current.find((a) => a.symbol === symbol)
         if (fallback) {
           updateAsset(fallback)
         }
@@ -158,7 +161,7 @@ export function MarketDetail() {
       active = false
       unsubscribe()
     }
-  }, [symbol, assets])
+  }, [symbol])
 
   useEffect(() => {
     if (!symbol) return
@@ -187,9 +190,7 @@ export function MarketDetail() {
       setChartLoading(true)
       setChartError(null)
       try {
-        const configuredApi = import.meta.env.VITE_PRICE_API_URL?.replace(/\/$/, '')
-        const apiBase = configuredApi || (window.location.protocol === 'http:' ? `http://${window.location.hostname}:3001` : '')
-        if (!apiBase) throw new Error('VITE_PRICE_API_URL is not configured for this deployment.')
+        const apiBase = getPriceApiBase()
         const res = await fetch(`${apiBase}/historical/${symbol}?timeframe=${tab}`)
         if (!active) return
         if (!res.ok) {
@@ -213,21 +214,6 @@ export function MarketDetail() {
 
   const holding = holdings.find((h) => h.symbol === symbol)
   const currentPrice = asset?.currentPrice || 0
-
-  // Override asset price with latest price from backend priceMap when available
-  useEffect(() => {
-    if (!symbol) return
-    const p = priceMap[symbol]
-    if (p) {
-      const newPrice = p.currentPrice
-      if (prevPrice.current !== null && newPrice !== prevPrice.current) {
-        setPriceFlash(newPrice > prevPrice.current ? 'up' : 'down')
-        setTimeout(() => setPriceFlash(null), 900)
-      }
-      prevPrice.current = newPrice
-      setAsset((a) => a ? { ...a, currentPrice: newPrice, change24h: p.change24h } : { symbol, name: symbol, currentPrice: newPrice, change24h: p.change24h, type: 'stock', priceSource: 'finnhub' })
-    }
-  }, [priceMap, symbol])
 
   const displayChartData = useMemo(() => {
     if (chartData.length === 0) return []
@@ -382,8 +368,8 @@ export function MarketDetail() {
         Markets
       </Link>
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 min-w-0">
+        <div className="xl:col-span-2 min-w-0">
           {/* Asset header */}
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
@@ -416,14 +402,14 @@ export function MarketDetail() {
                   {asset.type}
                 </span>
                 <span className="text-xs bg-navy-raised px-2 py-0.5 rounded text-white/40">
-                  {asset.priceSource === 'finnhub' ? 'Finnhub' : 'Simulated'}
+                  {asset.priceSource === 'finnhub' ? 'Finnhub' : 'Live'}
                 </span>
               </div>
             </div>
           </div>
 
           {/* Chart */}
-          <div className="card p-6 mt-6">
+          <div className="card p-4 sm:p-6 mt-6 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div className="flex gap-4">
                 {(['1H', '1D', '1W', '1M'] as TimeTab[]).map((t) => (
@@ -510,7 +496,7 @@ export function MarketDetail() {
         </div>
 
         {/* Trade panel */}
-        <div className="card p-6 self-start sticky top-24 min-w-[280px]">
+        <div className="card p-4 sm:p-6 self-start xl:sticky xl:top-24 min-w-0">
           {holding && (
             <div className="bg-navy-raised rounded-xl p-3 mb-4 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">{symbol[0]}</div>

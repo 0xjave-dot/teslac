@@ -63,7 +63,7 @@ export function Portfolio() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
         {/* Donut chart */}
         <div className="card p-6">
           <p className="text-sm font-medium text-white mb-4">Allocation</p>
@@ -105,12 +105,12 @@ export function Portfolio() {
         </div>
 
         {/* Holdings table */}
-        <div className="col-span-2 card overflow-hidden">
+        <div className="lg:col-span-2 card overflow-x-auto min-w-0">
           {enriched.length === 0 ? (
             <EmptyState message="No positions yet." />
           ) : (
             <>
-              <div className="grid grid-cols-6 items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
+              <div className="min-w-[640px] grid grid-cols-6 items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
                 <span className="col-span-2">Asset</span>
                 <span>Units</span>
                 <span>Avg Buy</span>
@@ -121,7 +121,7 @@ export function Portfolio() {
                 <div
                   key={h.symbol}
                   onClick={() => navigate(`/markets/${h.symbol}`)}
-                  className="grid grid-cols-6 items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/40 cursor-pointer"
+                  className="min-w-[640px] grid grid-cols-6 items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/40 cursor-pointer"
                 >
                   <div className="col-span-2 flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${

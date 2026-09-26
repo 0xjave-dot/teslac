@@ -34,8 +34,8 @@ export function AdminUsers() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-medium tracking-tight text-white">Users</h1>
           <span className="text-white/40 text-sm">{users.length} total</span>
         </div>
@@ -56,8 +56,8 @@ export function AdminUsers() {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="grid grid-cols-[2fr_2fr_1fr_1fr_1fr_auto] items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
+      <div className="card overflow-x-auto">
+        <div className="min-w-[760px] grid grid-cols-[2fr_2fr_1fr_1fr_1fr_auto] items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
           <span>Name</span>
           <span>Email</span>
           <span>Role</span>
@@ -68,7 +68,7 @@ export function AdminUsers() {
 
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="grid grid-cols-[2fr_2fr_1fr_1fr_1fr_auto] px-6 py-4 border-b border-white/[0.05] gap-4">
+            <div key={i} className="min-w-[760px] grid grid-cols-[2fr_2fr_1fr_1fr_1fr_auto] px-6 py-4 border-b border-white/[0.05] gap-4">
               {[1,2,3,4,5].map((k) => <div key={k} className="h-4 bg-navy-raised animate-pulse rounded" />)}
               <div className="w-4 h-4 bg-navy-raised animate-pulse rounded" />
             </div>
@@ -80,7 +80,7 @@ export function AdminUsers() {
             <div
               key={user.uid}
               onClick={() => navigate(`/admin/users/${user.uid}`)}
-              className="grid grid-cols-[2fr_2fr_1fr_1fr_1fr_auto] items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/50 cursor-pointer transition"
+              className="min-w-[760px] grid grid-cols-[2fr_2fr_1fr_1fr_1fr_auto] items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/50 cursor-pointer transition"
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium flex-shrink-0">

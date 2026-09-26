@@ -81,7 +81,7 @@ export function Wallet() {
     <div className="space-y-6">
       {toast && <Toast message={toast} type="success" onClose={() => setToast('')} />}
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
         {/* Balance cards */}
         <div className="flex flex-col gap-4">
           {[
@@ -113,7 +113,7 @@ export function Wallet() {
         </div>
 
         {/* Deposit / Withdraw */}
-        <div className="col-span-2 card p-6">
+        <div className="lg:col-span-2 card p-4 sm:p-6 min-w-0">
           <div className="bg-navy-raised rounded-xl p-1 flex gap-1 mb-6 w-fit">
             {(['deposit', 'withdraw'] as const).map((t) => (
               <button
@@ -228,12 +228,12 @@ export function Wallet() {
 
       {/* Transaction history */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-medium text-white">Transaction History</h2>
             <span className="bg-navy-raised text-white/50 text-xs px-2 py-0.5 rounded-full">{txs.length}</span>
           </div>
-          <div className="flex gap-1 bg-navy-raised rounded-xl p-1">
+          <div className="flex gap-1 bg-navy-raised rounded-xl p-1 max-w-full overflow-x-auto scrollbar-none">
             {(['all', 'deposit', 'withdrawal', 'pending'] as const).map((f) => (
               <button
                 key={f}
@@ -248,8 +248,8 @@ export function Wallet() {
           </div>
         </div>
 
-        <div className="card overflow-hidden">
-          <div className="grid grid-cols-5 gap-4 px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
+        <div className="card overflow-x-auto">
+          <div className="min-w-[680px] grid grid-cols-5 gap-4 px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
             <span>Type</span>
             <span>Amount</span>
             <span>Status</span>
@@ -260,7 +260,7 @@ export function Wallet() {
             <EmptyState message="No transactions yet. Make your first deposit above." />
           ) : (
             filteredTxs.map((tx) => (
-              <div key={tx.id} className="grid grid-cols-5 gap-4 px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/40 items-center">
+              <div key={tx.id} className="min-w-[680px] grid grid-cols-5 gap-4 px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/40 items-center">
                 <div className="flex items-center gap-2">
                   {tx.type === 'deposit'
                     ? <ArrowDownCircle className="w-4 h-4 text-gain flex-shrink-0" />

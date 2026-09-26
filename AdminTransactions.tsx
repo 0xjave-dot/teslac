@@ -82,7 +82,7 @@ export function AdminTransactions() {
 
       {/* Filter bar */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="bg-navy-raised rounded-xl p-1 flex gap-1">
+        <div className="bg-navy-raised rounded-xl p-1 flex gap-1 max-w-full overflow-x-auto scrollbar-none">
           {filterTabs.map((t) => (
             <button
               key={t}
@@ -99,7 +99,7 @@ export function AdminTransactions() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by user…"
-          className="bg-navy-raised border border-white/[0.07] rounded-lg px-4 py-1.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent/50 w-44"
+          className="bg-navy-raised border border-white/[0.07] rounded-lg px-4 py-1.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent/50 w-full sm:w-44"
         />
         <select
           value={sort}
@@ -110,8 +110,8 @@ export function AdminTransactions() {
         </select>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_2fr_auto] items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
+      <div className="card overflow-x-auto">
+        <div className="min-w-[900px] grid grid-cols-[2fr_1fr_1fr_1fr_2fr_auto] items-center px-6 py-3 border-b border-white/[0.07] text-xs text-white/40 uppercase tracking-wider">
           <span>User</span>
           <span>Type</span>
           <span>Amount</span>
@@ -125,7 +125,7 @@ export function AdminTransactions() {
         ) : (
           filtered.map((tx) => (
             <div key={tx.id}>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_2fr_auto] items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/30 transition gap-2">
+              <div className="min-w-[900px] grid grid-cols-[2fr_1fr_1fr_1fr_2fr_auto] items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/30 transition gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-7 h-7 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium flex-shrink-0">
                     {(tx.userName || 'U').slice(0, 2).toUpperCase()}
