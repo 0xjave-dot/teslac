@@ -25,15 +25,19 @@ export function Portfolio() {
 
   const enriched = holdings.map((h) => {
     const asset = priceMap[h.symbol]
-    const unavailable = h.symbol === 'TSLA' && !isTslaPriceFresh(asset, now)
-    const price = unavailable ? null : asset?.currentPrice || h.avgBuyPrice
+    const hasKnownPrice = Number.isFinite(asset?.currentPrice) && (asset?.currentPrice || 0) > 0
+    const staleTslaPrice = h.symbol === 'TSLA' && !isTslaPriceFresh(asset, now) && hasKnownPrice
+    const price = h.symbol === 'TSLA' && !isTslaPriceFresh(asset, now)
+      ? hasKnownPrice ? asset!.currentPrice : null
+      : asset?.currentPrice || h.avgBuyPrice
     const value = price === null ? null : h.units * price
     const pnl = price === null ? null : (price - h.avgBuyPrice) * h.units
     const pnlPct = price === null || h.avgBuyPrice <= 0 ? null : ((price - h.avgBuyPrice) / h.avgBuyPrice) * 100
-    return { ...h, currentPrice: price, value, pnl, pnlPct }
+    return { ...h, currentPrice: price, value, pnl, pnlPct, stalePrice: staleTslaPrice }
   })
 
   const hasUnavailableHolding = enriched.some((holding) => holding.value === null)
+  const hasStaleHolding = enriched.some((holding) => holding.stalePrice)
   const totalValue = hasUnavailableHolding ? null : enriched.reduce((s, h) => s + (h.value || 0), 0)
   const totalCost = enriched.reduce((s, h) => s + h.units * h.avgBuyPrice, 0)
   const totalPnl = totalValue === null ? null : totalValue - totalCost
@@ -62,6 +66,11 @@ export function Portfolio() {
             <p className={`text-2xl font-medium num ${textColor}`}>{value}</p>
           </div>
         ))}
+        {hasStaleHolding && (
+          <p role="status" className="basis-full text-xs text-amber-300/80">
+            Estimated using the last known TSLA price; portfolio value and P&amp;L may be outdated.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
@@ -133,7 +142,9 @@ export function Portfolio() {
                   </div>
                   <span className="num text-sm text-white">{h.units.toFixed(4)}</span>
                   <span className="num text-sm text-white/60">${fmt(h.avgBuyPrice)}</span>
-                   <span className="num text-sm text-white">{h.currentPrice === null ? 'Unavailable' : `$${fmt(h.currentPrice)}`}</span>
+                  <span className="num text-sm text-white">
+                    {h.currentPrice === null ? 'Unavailable' : <>{`$${fmt(h.currentPrice)}`}{h.stalePrice && <small className="block text-[10px] text-amber-300/70">Last known</small>}</>}
+                  </span>
                    {h.pnl === null || h.pnlPct === null
                      ? <span className="text-xs text-white/40">Unavailable</span>
                      : <div>
