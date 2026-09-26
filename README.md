@@ -1,10 +1,10 @@
 # Tesla Stock Investment
 
-A live demo trading platform built with React, TypeScript, Firebase, and Finnhub.
+A live trading platform built with React, TypeScript, Firebase, and Finnhub.
 
 ## Project Overview
 
-Tesla Stock Investment is a full-featured demo trading application that allows users to practice buying and selling stocks and crypto using real market prices — with zero financial risk. It features real-time Firestore price updates, an admin approval workflow for deposits/withdrawals, a live portfolio tracker, and a price polling Express server.
+Tesla Stock Investment is a full-featured trading application that allows users to practice buying and selling stocks and crypto using real market prices — with zero financial risk. It features real-time Firestore price updates, an admin approval workflow for deposits/withdrawals, a live portfolio tracker, and a price polling Express server.
 
 ## Tech Stack
 

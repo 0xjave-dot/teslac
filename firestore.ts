@@ -29,6 +29,16 @@ function toDate(val: unknown): Date | null {
   return null
 }
 
+function toBalance(data: DocumentData): Balance {
+  const amount = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return {
+    available: amount(data.available),
+    locked: amount(data.locked),
+    total: amount(data.total),
+    updatedAt: toDate(data.updatedAt),
+  }
+}
+
 export async function ensureUserDoc(user: User) {
   const userRef = doc(db, 'users', user.uid)
   const balRef = doc(db, 'balances', user.uid)
@@ -82,7 +92,7 @@ export function onUserDoc(uid: string, cb: (u: UserDoc | null) => void, onError?
 export function onBalance(uid: string, cb: (b: Balance) => void) {
   return onSnapshot(doc(db, 'balances', uid), (snap) => {
     if (!snap.exists()) { cb({ available: 0, locked: 0, total: 0 }); return }
-    cb(snap.data() as Balance)
+    cb(toBalance(snap.data()))
   })
 }
 
@@ -396,7 +406,7 @@ export async function getAllUsers() {
 export async function getAllBalances(): Promise<Record<string, Balance>> {
   const snap = await getDocs(collection(db, 'balances'))
   const map: Record<string, Balance> = {}
-  snap.docs.forEach((d) => { map[d.id] = d.data() as Balance })
+  snap.docs.forEach((d) => { map[d.id] = toBalance(d.data()) })
   return map
 }
 
