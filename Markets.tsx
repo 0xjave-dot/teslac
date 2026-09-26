@@ -5,22 +5,11 @@ import { useAssets } from './useAssets'
 import { PriceChange } from './PriceChange'
 import { AssetTypeBadge } from './AssetTypeBadge'
 import { EmptyState } from './EmptyState'
-import type { Asset } from './types'
+import { AssetLogo } from './AssetLogo'
 import { isTslaPriceFresh } from './priceUtils'
 
 function fmt(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function AssetIcon({ asset }: { asset: Asset }) {
-  const isStock = asset.type === 'stock'
-  return (
-    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0 ${
-      isStock ? 'bg-accent/20 text-accent' : 'bg-purple-500/20 text-purple-400'
-    }`}>
-      {asset.name[0]}
-    </div>
-  )
 }
 
 export function Markets() {
@@ -122,7 +111,7 @@ export function Markets() {
               className="min-w-[680px] grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/50 cursor-pointer transition"
             >
               <div className="flex items-center gap-3">
-                <AssetIcon asset={asset} />
+                <AssetLogo symbol={asset.symbol} name={asset.name} size={36} />
                 <div>
                   <p className="text-sm font-medium text-white">{asset.symbol}</p>
                   <p className="text-xs text-white/40">{asset.name}</p>

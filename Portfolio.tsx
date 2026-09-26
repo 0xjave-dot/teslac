@@ -7,6 +7,7 @@ import { useAssets } from './useAssets'
 import { PriceChange } from './PriceChange'
 import { EmptyState } from './EmptyState'
 import { isTslaPriceFresh } from './priceUtils'
+import { AssetLogo } from './AssetLogo'
 
 const COLORS = ['#3b7bff', '#06b6d4', '#a855f7', '#f5a623', '#22c55e', '#f43f5e', '#84cc16', '#fb923c']
 
@@ -124,11 +125,7 @@ export function Portfolio() {
                   className="min-w-[640px] grid grid-cols-6 items-center px-6 py-4 border-b border-white/[0.05] hover:bg-navy-raised/40 cursor-pointer"
                 >
                   <div className="col-span-2 flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                      h.type === 'stock' ? 'bg-accent/20 text-accent' : 'bg-purple-500/20 text-purple-400'
-                    }`}>
-                      {h.symbol[0]}
-                    </div>
+                    <AssetLogo symbol={h.symbol} name={h.name} size={32} />
                     <div>
                       <p className="text-sm font-medium text-white">{h.symbol}</p>
                       <p className="text-xs text-white/40">{h.name}</p>

@@ -39,14 +39,14 @@ export function AdminUsers() {
           <h1 className="text-2xl font-medium tracking-tight text-white">Users</h1>
           <span className="text-white/40 text-sm">{users.length} total</span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto sm:flex-nowrap">
+          <div className="relative w-full sm:w-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search users…"
-              className="bg-navy-raised border border-white/[0.07] rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent/50 w-48"
+              className="bg-navy-raised border border-white/[0.07] rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent/50 w-full sm:w-48"
             />
           </div>
           <button onClick={load} disabled={loading} className="btn-ghost flex items-center gap-2 py-2 text-xs disabled:opacity-60">

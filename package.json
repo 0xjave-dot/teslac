@@ -19,15 +19,15 @@
     "express": "^4.19.2",
     "firebase": "^10.12.0",
     "firebase-admin": "^12.2.0",
+    "lightweight-charts": "^4.0.0",
     "lucide-react": "^0.400.0",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.23.1",
-    "recharts": "^2.12.7"
-    ,
-    "lightweight-charts": "^4.0.0"
+    "recharts": "^2.12.7",
+    "simple-icons": "^16.32.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

@@ -17,6 +17,7 @@ import { StatusBadge } from './StatusBadge'
 import { EmptyState } from './EmptyState'
 import { Spinner } from './Spinner'
 import { Toast } from './Toast'
+import { AssetLogo } from './AssetLogo'
 import type { UserDoc, Balance, Transaction, Holding, Asset } from './types'
 
 function fmt(n: number) {
@@ -222,9 +223,7 @@ export function AdminUserDetail() {
             const pnl = (price - h.avgBuyPrice) * h.units
             return (
               <div key={h.symbol} className="flex items-center gap-4 py-3 border-b border-white/[0.05]">
-                <div className="w-8 h-8 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium">
-                  {h.symbol[0]}
-                </div>
+                <AssetLogo symbol={h.symbol} name={h.name} size={32} />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-white">{h.symbol}</p>
                   <p className="text-xs text-white/40">{h.units.toFixed(4)} units · avg ${fmt(h.avgBuyPrice)}</p>

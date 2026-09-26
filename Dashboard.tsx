@@ -42,14 +42,14 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Portfolio hero */}
-      <div className="card p-8">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
+      <div className="card p-5 sm:p-8">
+        <div className="flex items-start justify-between flex-wrap gap-5">
+          <div className="min-w-0 flex-1">
             <p className="text-white/50 text-xs tracking-widest uppercase mb-2">Total Portfolio Value</p>
             <p className="text-4xl font-medium tracking-tight num text-white">
               {totalValue === null ? 'Unavailable' : `$${fmt(totalValue)}`}
             </p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               {hasUnavailableHolding
                 ? <span className="text-xs text-white/40">Live TSLA price unavailable; portfolio value is not current.</span>
                 : <span className={`text-sm num ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
@@ -59,7 +59,7 @@ export function Dashboard() {
               <span className="text-white/30 text-xs">all-time P&L</span>
             </div>
           </div>
-          <div className="flex gap-8">
+          <div className="flex gap-6 sm:gap-8 flex-wrap">
             <div>
               <p className="text-xs text-white/50">Available</p>
               <p className="text-sm font-medium text-white num mt-1">${fmt(balance.available)}</p>
@@ -141,8 +141,8 @@ export function Dashboard() {
       </div>
 
       {/* Recent transactions */}
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="card p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
           <p className="text-sm font-medium text-white">Recent Activity</p>
           <Link to="/wallet" className="text-accent text-xs hover:underline">View all →</Link>
         </div>
@@ -151,8 +151,8 @@ export function Dashboard() {
         ) : (
           <div>
             {txs.map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between py-3 border-b border-white/[0.05]">
-                <div className="flex items-center gap-3">
+              <div key={tx.id} className="flex items-center justify-between gap-3 flex-wrap py-3 border-b border-white/[0.05]">
+                <div className="flex items-center gap-3 min-w-0">
                   {tx.type === 'deposit'
                     ? <ArrowDownCircle className="w-5 h-5 text-gain" />
                     : <ArrowUpCircle className="w-5 h-5 text-white/30" />
@@ -164,7 +164,7 @@ export function Dashboard() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 ml-auto">
                   <span className="num text-sm text-white">${fmt(tx.amount)}</span>
                   <StatusBadge status={tx.status} />
                 </div>

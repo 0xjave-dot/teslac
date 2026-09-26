@@ -12,6 +12,7 @@ import { onHoldings, onOrders, placeBuyOrder, placeSellOrder } from './firestore
 import type { AdvancedOrderOptions } from './firestore'
 import { PriceChange } from './PriceChange'
 import { getPriceApiBase } from './priceUtils'
+import { AssetLogo } from './AssetLogo'
 import { EmptyState } from './EmptyState'
 import { Spinner } from './Spinner'
 import { Toast } from './Toast'
@@ -380,11 +381,7 @@ export function MarketDetail() {
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                  asset.type === 'stock' ? 'bg-accent/20 text-accent' : 'bg-purple-500/20 text-purple-400'
-                }`}>
-                  {asset.name?.[0] || symbol[0]}
-                </div>
+                <AssetLogo symbol={symbol} name={asset.name} size={40} />
                 <div>
                   <h1 className="text-2xl font-medium tracking-tight text-white">{symbol}</h1>
                   <p className="text-white/50 text-sm">{asset.name}</p>
@@ -505,7 +502,7 @@ export function MarketDetail() {
         <div className="card p-4 sm:p-6 self-start xl:sticky xl:top-24 min-w-0">
           {holding && (
             <div className="bg-navy-raised rounded-xl p-3 mb-4 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">{symbol[0]}</div>
+              <AssetLogo symbol={symbol} name={asset.name} size={32} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-white/50">Your position</p>
                 <p className="text-white font-medium text-sm">{holding.units.toFixed(4)} units</p>
