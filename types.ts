@@ -19,7 +19,7 @@ export interface Asset {
   symbol: string
   name: string
   type: 'stock' | 'crypto'
-  priceSource: 'finnhub' | 'nasdaq' | 'coingecko' | 'freecrypto' | 'seeded'
+  priceSource: 'finnhub' | 'nasdaq' | 'coingecko' | 'freecrypto' | 'binance' | 'seeded'
   currentPrice: number
   change24h: number
   updatedAt?: Date | null

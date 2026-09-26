@@ -77,7 +77,7 @@ const priceCache: Record<string, {
   currentPrice: number
   change24h: number
   priceStatus?: 'live' | 'error'
-  priceSource?: 'finnhub' | 'nasdaq' | 'coingecko' | 'freecrypto' | 'seeded'
+  priceSource?: 'finnhub' | 'nasdaq' | 'coingecko' | 'freecrypto' | 'binance' | 'seeded'
   priceUpdatedAt?: number
   priceError?: string | null
 }> = {}
@@ -265,6 +265,34 @@ async function fetchCoinGeckoCryptoPrices(symbols: string[]): Promise<Record<str
   }
 }
 
+async function fetchBinanceCryptoPrices(symbols: string[]): Promise<Record<string, { price: number; change: number }>> {
+  if (symbols.length === 0) return {}
+  const pairs = symbols.map((symbol) => `${symbol}USDT`)
+  const url = new URL('https://api.binance.com/api/v3/ticker/24hr')
+  url.searchParams.set('symbols', JSON.stringify(pairs))
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) {
+      console.error(`[Binance] HTTP ${res.status} for crypto quotes`)
+      return {}
+    }
+    const data = await res.json() as Array<{ symbol?: string; lastPrice?: string; priceChangePercent?: string }>
+    return Object.fromEntries(data.flatMap((ticker) => {
+      const symbol = ticker.symbol?.replace(/USDT$/, '')
+      const price = Number(ticker.lastPrice)
+      const change = Number(ticker.priceChangePercent)
+      if (!symbol || !symbols.includes(symbol) || !Number.isFinite(price) || price <= 0) return []
+      return [[symbol, { price, change: Number.isFinite(change) ? change : 0 }]]
+    }))
+  } catch (error) {
+    console.error('[Binance] Error fetching crypto quotes:', error)
+    return {}
+  }
+}
+
 async function fetchFreeCrypto(symbol: string): Promise<{ price: number; change: number } | null> {
   if (!FREECRYPTO_API_KEY) return null
   try {
@@ -373,11 +401,13 @@ async function pollPrices() {
   }
   const missingCryptoSymbols = cryptoSymbols.filter((sym) => !cryptoResults[sym])
   const coingeckoResults = await fetchCoinGeckoCryptoPrices(missingCryptoSymbols)
+  const missingBinanceSymbols = missingCryptoSymbols.filter((sym) => !coingeckoResults[sym])
+  const binanceResults = await fetchBinanceCryptoPrices(missingBinanceSymbols)
 
-  // Prefer the configured provider, then use the batched public fallback.
+  // Prefer configured providers, then use public providers in order.
   for (const sym of cryptoSymbols) {
-    const result = cryptoResults[sym] || coingeckoResults[sym]
-    const priceSource = cryptoResults[sym] ? 'freecrypto' : 'coingecko'
+    const result = cryptoResults[sym] || coingeckoResults[sym] || binanceResults[sym]
+    const priceSource = cryptoResults[sym] ? 'freecrypto' : coingeckoResults[sym] ? 'coingecko' : 'binance'
     if (result) {
       priceCache[sym] = {
         currentPrice: result.price,
