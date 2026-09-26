@@ -43,7 +43,7 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
         const endpoints = configuredApi
           ? [`${configuredApi}/prices`]
           : window.location.protocol === 'https:'
-            ? ['/prices']
+            ? []
             : [`http://${host}:3001/prices`, '/prices']
         let data: PriceResponse | null = null
         for (const endpoint of endpoints) {

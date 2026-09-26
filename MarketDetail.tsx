@@ -187,8 +187,10 @@ export function MarketDetail() {
       setChartLoading(true)
       setChartError(null)
       try {
-        const host = window.location.hostname
-        const res = await fetch(`http://${host}:3001/historical/${symbol}?timeframe=${tab}`)
+        const configuredApi = import.meta.env.VITE_PRICE_API_URL?.replace(/\/$/, '')
+        const apiBase = configuredApi || (window.location.protocol === 'http:' ? `http://${window.location.hostname}:3001` : '')
+        if (!apiBase) throw new Error('VITE_PRICE_API_URL is not configured for this deployment.')
+        const res = await fetch(`${apiBase}/historical/${symbol}?timeframe=${tab}`)
         if (!active) return
         if (!res.ok) {
           const text = await res.text().catch(() => '')

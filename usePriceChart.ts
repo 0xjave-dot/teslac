@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { onPriceHistory } from './firestore'
-import type { Asset, PriceCandle, PriceResolution } from './types'
+import type { Asset, PriceCandle } from './types'
 
 export type PriceRange = '1H' | '1D' | '1W' | '1M'
 
-const RANGE_CONFIG: Record<PriceRange, { resolution: PriceResolution; durationMs: number; intervalMs: number }> = {
-  '1H': { resolution: '1m', durationMs: 60 * 60 * 1000, intervalMs: 60 * 1000 },
-  '1D': { resolution: '1m', durationMs: 24 * 60 * 60 * 1000, intervalMs: 60 * 1000 },
-  '1W': { resolution: '5m', durationMs: 7 * 24 * 60 * 60 * 1000, intervalMs: 5 * 60 * 1000 },
-  '1M': { resolution: '15m', durationMs: 30 * 24 * 60 * 60 * 1000, intervalMs: 15 * 60 * 1000 },
+const RANGE_CONFIG: Record<PriceRange, { intervalMs: number }> = {
+  '1H': { intervalMs: 2 * 60 * 1000 },
+  '1D': { intervalMs: 5 * 60 * 1000 },
+  '1W': { intervalMs: 60 * 60 * 1000 },
+  '1M': { intervalMs: 24 * 60 * 60 * 1000 },
 }
+
+const PRICE_API_URL = import.meta.env.VITE_PRICE_API_URL?.replace(/\/$/, '') || ''
 
 export interface PriceChartPoint extends PriceCandle {
   label: string
@@ -23,34 +24,70 @@ export function usePriceChart(
 ): { data: PriceChartPoint[]; loading: boolean; error: string | null; warning: string | null } {
   const [candles, setCandles] = useState<PriceCandle[]>([])
   const [loading, setLoading] = useState(true)
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const config = RANGE_CONFIG[range]
-  const fromTime = useMemo(() => Date.now() - config.durationMs, [config.durationMs, symbol, range])
 
   useEffect(() => {
     setCandles([])
-    setSubscriptionError(null)
+    setHistoryError(null)
 
     if (symbol !== 'TSLA') {
       setLoading(false)
       return
     }
 
-    setLoading(true)
-    return onPriceHistory(
-      symbol,
-      config.resolution,
-      fromTime,
-      (nextCandles) => {
+    if (!PRICE_API_URL) {
+      setHistoryError('VITE_PRICE_API_URL is not configured for this deployment.')
+      setLoading(false)
+      return
+    }
+
+    let active = true
+    let loadingInitial = true
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(`${PRICE_API_URL}/historical/${symbol}?timeframe=${range}`)
+        if (!response.ok) throw new Error(`Price server returned ${response.status}.`)
+        const points = await response.json() as Array<{ price?: number; open?: number; high?: number; low?: number; close?: number }>
+        if (!Array.isArray(points)) throw new Error('Price server returned invalid historical data.')
+        const sampledAt = Date.now()
+        const nextCandles = points.flatMap((point, index) => {
+          const close = point.close ?? point.price
+          const open = point.open ?? close
+          const high = point.high ?? (open !== undefined && close !== undefined ? Math.max(open, close) : undefined)
+          const low = point.low ?? (open !== undefined && close !== undefined ? Math.min(open, close) : undefined)
+          if (![open, high, low, close].every(Number.isFinite)) return []
+          return [{
+            time: sampledAt - (points.length - index - 1) * config.intervalMs,
+            open: open as number,
+            high: high as number,
+            low: low as number,
+            close: close as number,
+            volume: 0,
+          }]
+        })
+        if (!active) return
         setCandles(nextCandles)
-        setLoading(false)
-      },
-      (error) => {
-        setSubscriptionError(error.message || 'Could not load historical market prices.')
-        setLoading(false)
+        setHistoryError(null)
+      } catch (error) {
+        if (!active) return
+        setHistoryError(error instanceof Error ? error.message : 'Could not load historical market prices.')
+      } finally {
+        if (active && loadingInitial) {
+          loadingInitial = false
+          setLoading(false)
+        }
       }
-    )
-  }, [symbol, range, config.resolution, fromTime])
+    }
+
+    setLoading(true)
+    void loadHistory()
+    const intervalId = window.setInterval(() => { void loadHistory() }, 60_000)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [symbol, range, config.intervalMs])
 
   const data = useMemo(() => {
     const source = candles.map((candle) => ({ ...candle }))
@@ -89,7 +126,6 @@ export function usePriceChart(
     }))
   }, [candles, asset, now, range, config.intervalMs])
 
-  const historyError = asset?.historyStatus === 'error' ? asset.historyError || 'Historical prices could not be refreshed.' : null
   const quoteAge = typeof asset?.priceUpdatedAt === 'number' ? now - asset.priceUpdatedAt : Number.POSITIVE_INFINITY
   const quoteWarning = symbol === 'TSLA'
     ? asset?.priceStatus === 'error'
@@ -98,8 +134,8 @@ export function usePriceChart(
         ? 'The live TSLA quote is missing or stale.'
         : null
     : null
-  const error = subscriptionError || (data.length === 0 ? historyError || quoteWarning : null)
-  const warning = data.length > 0 ? subscriptionError || historyError || quoteWarning : null
+  const error = historyError || (data.length === 0 ? quoteWarning : null)
+  const warning = data.length > 0 ? historyError || quoteWarning : null
 
   return { data, loading, error, warning }
 }
