@@ -442,6 +442,9 @@ async function pollPrices() {
     priceCache[sym] = { currentPrice: price, change24h: change }
     const ref = db.collection('assets').doc(sym)
     batch.set(ref, {
+      name: SEEDED[sym].name,
+      type: SEEDED[sym].type,
+      priceSource: 'seeded',
       currentPrice: price,
       change24h: change,
       updatedAt: now,
