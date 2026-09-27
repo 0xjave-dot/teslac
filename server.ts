@@ -592,6 +592,7 @@ function generateSimulatedChart(symbol: string, timeframe: string, currentPrice:
 app.get('/historical/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase()
   const timeframe = (req.query.timeframe as string) || '1D'
+  res.set('Cache-Control', 'no-store')
 
   try {
     const yahooSymbol = YAHOO_MAP[symbol]
@@ -665,7 +666,8 @@ app.get('/historical/:symbol', async (req, res) => {
       }
 
       chartPoints.push({
-        time: timeStr,
+        time: timestamps[i] * 1000,
+        label: timeStr,
         price: parseFloat(close.toFixed(2)),
         open: parseFloat(open.toFixed(2)),
         high: parseFloat(high.toFixed(2)),
