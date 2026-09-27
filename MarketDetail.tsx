@@ -113,7 +113,7 @@ export function MarketDetail() {
   const prevPrice = useRef<number | null>(null)
   const [priceFlash, setPriceFlash] = useState<'up' | 'down' | null>(null)
 
-  const { assets, priceMap } = useAssets()
+  const { assets, priceMap, now } = useAssets()
   const assetsRef = useRef(assets)
   assetsRef.current = assets
 
@@ -296,7 +296,7 @@ export function MarketDetail() {
           </div>
 
           {/* Chart */}
-          <div className="card p-4 sm:p-6 mt-6 min-w-0 overflow-hidden">
+          <div className="card p-4 sm:p-6 mt-6 min-w-0">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div className="flex gap-4">
                 {(['1H', '1D', '1W', '1M'] as TimeTab[]).map((t) => (
@@ -327,7 +327,7 @@ export function MarketDetail() {
                 ))}
               </div>
             </div>
-            <StockPriceChart symbol={symbol} range={tab} asset={asset} height={280} chartType={chartType} />
+            <StockPriceChart symbol={symbol} range={tab} asset={asset} now={now} height={280} chartType={chartType} />
           </div>
 
           {/* Order history */}
