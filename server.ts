@@ -261,6 +261,7 @@ async function fetchCoinGeckoCryptoPrices(symbols: string[]): Promise<Record<str
   try {
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) { console.error(`[Coingecko] HTTP ${res.status} for crypto quotes`); return {} }
     const data = await res.json() as any
@@ -463,7 +464,14 @@ async function runPricePolling() {
     const price = simulatePrice(sym)
     const prev = priceCache[sym]?.currentPrice || SEEDED[sym].price
     const change = parseFloat(((price - prev) / prev * 100).toFixed(3))
-    priceCache[sym] = { currentPrice: price, change24h: change }
+    priceCache[sym] = {
+      currentPrice: price,
+      change24h: change,
+      priceStatus: 'live',
+      priceSource: 'seeded',
+      priceUpdatedAt: Date.now(),
+      priceError: null,
+    }
     const ref = db.collection('assets').doc(sym)
     batch.set(ref, {
       name: SEEDED[sym].name,
