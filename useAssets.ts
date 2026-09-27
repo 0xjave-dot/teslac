@@ -65,33 +65,36 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
         }
         if (!data) return
         if (!mounted) return
+        const sampledAt = Date.now()
         setAssets((prev) => {
           // If we have Firestore-provided assets, merge prices in
           if (prev && prev.length > 0) {
             return prev.map((a) => {
               const p = data[a.symbol]
+              const status = p?.priceStatus ?? 'live'
               return p && Number.isFinite(p.currentPrice) && p.currentPrice > 0 && Number.isFinite(p.change24h) ? normalizeAsset({
                 ...a,
                 currentPrice: p.currentPrice,
                 change24h: p.change24h,
-                priceStatus: p.priceStatus || a.priceStatus,
-                priceUpdatedAt: p.priceUpdatedAt || a.priceUpdatedAt,
+                priceStatus: status,
+                priceUpdatedAt: p.priceUpdatedAt ?? (status === 'live' ? sampledAt : a.priceUpdatedAt),
                 priceSource: p.priceSource || a.priceSource,
-                priceError: p.priceError ?? a.priceError,
+                priceError: p.priceError ?? (status === 'live' ? null : a.priceError),
               }) : normalizeAsset(a)
             })
           }
           // Otherwise seed defaults and apply prices where available
           const seeded = DEFAULT_ASSETS.map((a) => {
             const p = data[a.symbol]
+            const status = p?.priceStatus ?? 'live'
             return p && Number.isFinite(p.currentPrice) && p.currentPrice > 0 && Number.isFinite(p.change24h) ? normalizeAsset({
               ...a,
               currentPrice: p.currentPrice,
               change24h: p.change24h,
-              priceStatus: p.priceStatus || a.priceStatus,
-              priceUpdatedAt: p.priceUpdatedAt,
+              priceStatus: status,
+              priceUpdatedAt: p.priceUpdatedAt ?? (status === 'live' ? sampledAt : a.priceUpdatedAt),
               priceSource: p.priceSource || a.priceSource,
-              priceError: p.priceError ?? a.priceError,
+              priceError: p.priceError ?? (status === 'live' ? null : a.priceError),
             }) : normalizeAsset(a)
           })
           return seeded
