@@ -40,8 +40,18 @@ function CandlestickChart({ data, height }: { data: ReturnType<typeof usePriceCh
         vertLines: { color: 'rgba(255,255,255,0.04)' },
         horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
-      timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: true, secondsVisible: false },
+      rightPriceScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        scaleMargins: { top: 0.12, bottom: 0.12 },
+      },
+      timeScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 2,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
     })
     const series = chart.addCandlestickSeries({
       upColor: '#10b981',
@@ -73,7 +83,7 @@ function CandlestickChart({ data, height }: { data: ReturnType<typeof usePriceCh
     chartRef.current?.timeScale().fitContent()
   }, [data])
 
-  return <div ref={containerRef} role="img" aria-label={`${data.length} ${'price'} candlesticks`} style={{ width: '100%', height }} />
+  return <div ref={containerRef} role="img" aria-label={`${data.length} price candlesticks`} style={{ width: '100%', minWidth: 0, height, overflow: 'hidden' }} />
 }
 
 export function StockPriceChart({
@@ -95,6 +105,10 @@ export function StockPriceChart({
 }) {
   const { data, loading, error, warning } = usePriceChart(symbol, range, asset, now)
   const gradientId = `price-gradient-${useId().replace(/:/g, '')}`
+  const values = data.flatMap((point) => [point.low, point.high]).filter(Number.isFinite)
+  const minValue = values.length > 0 ? Math.min(...values) : 0
+  const maxValue = values.length > 0 ? Math.max(...values) : 0
+  const valuePadding = Math.max((maxValue - minValue) * 0.08, maxValue * 0.002, 0.01)
 
   if (loading && data.length === 0) {
     return <div role="status" className="flex items-center justify-center text-xs text-white/45" style={{ height }}>Loading real market history…</div>
@@ -117,7 +131,7 @@ export function StockPriceChart({
       {chartType === 'candlestick' ? (
         <CandlestickChart data={data} height={height} />
       ) : (
-        <ResponsiveContainer width="100%" height={height}>
+        <ResponsiveContainer width="100%" height={height} minWidth={0}>
           <AreaChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -130,7 +144,7 @@ export function StockPriceChart({
                 <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                 <YAxis
-                  domain={['auto', 'auto']}
+                  domain={[minValue - valuePadding, maxValue + valuePadding]}
                   tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.3)' }}
                   axisLine={false}
                   tickLine={false}
