@@ -77,7 +77,7 @@ const priceCache: Record<string, {
   currentPrice: number
   change24h: number
   priceStatus?: 'live' | 'error'
-  priceSource?: 'finnhub' | 'nasdaq' | 'coingecko' | 'freecrypto' | 'binance' | 'seeded'
+  priceSource?: 'finnhub' | 'nasdaq' | 'coingecko' | 'freecrypto' | 'binance' | 'okx' | 'seeded'
   priceUpdatedAt?: number
   priceError?: string | null
 }> = {}
@@ -323,6 +323,30 @@ async function fetchBinanceCryptoPrices(symbols: string[]): Promise<Record<strin
   }
 }
 
+async function fetchOkxCryptoPrices(symbols: string[]): Promise<Record<string, { price: number; change: number }>> {
+  const results = await Promise.all(symbols.map(async (symbol) => {
+    try {
+      const res = await fetch(`https://www.okx.com/api/v5/market/ticker?instId=${symbol}-USDT`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) return null
+      const data = await res.json() as { code?: string; data?: Array<{ last?: string; open24h?: string }> }
+      const ticker = data.code === '0' ? data.data?.[0] : undefined
+      const price = Number(ticker?.last)
+      const open = Number(ticker?.open24h)
+      if (!Number.isFinite(price) || price <= 0) return null
+      const change = Number.isFinite(open) && open > 0 ? ((price - open) / open) * 100 : 0
+      return [symbol, { price, change }] as const
+    } catch (error) {
+      console.error(`[OKX] Error fetching ${symbol}:`, error)
+      return null
+    }
+  }))
+
+  return Object.fromEntries(results.filter((result): result is readonly [string, { price: number; change: number }] => result !== null))
+}
+
 async function fetchFreeCrypto(symbol: string): Promise<{ price: number; change: number } | null> {
   if (!FREECRYPTO_API_KEY) return null
   try {
@@ -444,11 +468,13 @@ async function runPricePolling() {
   const coingeckoResults = await fetchCoinGeckoCryptoPrices(missingCryptoSymbols)
   const missingBinanceSymbols = missingCryptoSymbols.filter((sym) => !coingeckoResults[sym])
   const binanceResults = await fetchBinanceCryptoPrices(missingBinanceSymbols)
+  const missingOkxSymbols = missingBinanceSymbols.filter((sym) => !binanceResults[sym])
+  const okxResults = await fetchOkxCryptoPrices(missingOkxSymbols)
 
   // Prefer configured providers, then use public providers in order.
   for (const sym of cryptoSymbols) {
-    const result = cryptoResults[sym] || coingeckoResults[sym] || binanceResults[sym]
-    const priceSource = cryptoResults[sym] ? 'freecrypto' : coingeckoResults[sym] ? 'coingecko' : 'binance'
+    const result = cryptoResults[sym] || coingeckoResults[sym] || binanceResults[sym] || okxResults[sym]
+    const priceSource = cryptoResults[sym] ? 'freecrypto' : coingeckoResults[sym] ? 'coingecko' : binanceResults[sym] ? 'binance' : 'okx'
     if (result) {
       priceCache[sym] = {
         currentPrice: result.price,
