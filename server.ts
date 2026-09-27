@@ -1,7 +1,6 @@
 import express from 'express'
 import cors from 'cors'
 import cron from 'node-cron'
-import WebSocket from 'ws'
 import { initializeApp, applicationDefault, cert, getApps } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { readFileSync } from 'fs'
@@ -66,12 +65,6 @@ const CRYPTO_MAP: Record<string, string> = {
   SOL: 'BINANCE:SOLUSDT',
   BNB: 'BINANCE:BNBUSDT',
 }
-const BINANCE_STREAM_SYMBOLS: Record<string, string> = {
-  btcusdt: 'BTC',
-  ethusdt: 'ETH',
-  solusdt: 'SOL',
-  bnbusdt: 'BNB',
-}
 
 const SEEDED: Record<string, { name: string; price: number; type: string; seed: number }> = {
   SPACEX: { name: 'SpaceX', price: 185.40, type: 'stock', seed: 185.40 },
@@ -90,75 +83,8 @@ const priceCache: Record<string, {
 }> = {}
 let lastUpdate = ''
 let polling = false
-const lastStreamUpdate = new Map<string, number>()
 
-function updateStreamPrice(symbol: string, price: number, updatedAt: number, priceSource: 'finnhub' | 'binance') {
-  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(updatedAt)) return
-  const previous = priceCache[symbol]
-  if (previous?.priceUpdatedAt && updatedAt < previous.priceUpdatedAt) return
-  priceCache[symbol] = {
-    currentPrice: price,
-    change24h: previous?.change24h ?? 0,
-    priceStatus: 'live',
-    priceSource,
-    priceUpdatedAt: updatedAt,
-    priceError: null,
-  }
-  lastStreamUpdate.set(symbol, updatedAt)
-}
-
-function connectFinnhubStream() {
-  if (!FINNHUB_API_KEY) {
-    console.warn('[Finnhub] Streaming disabled: FINNHUB_API_KEY is not configured.')
-    return
-  }
-
-  const socket = new WebSocket(`wss://ws.finnhub.io?token=${encodeURIComponent(FINNHUB_API_KEY)}`)
-  socket.on('open', () => socket.send(JSON.stringify({ type: 'subscribe', symbol: 'TSLA' })))
-  socket.on('message', (raw) => {
-    try {
-      const message = JSON.parse(raw.toString()) as { type?: string; data?: Array<{ s?: string; p?: number; t?: number }> }
-      if (message.type !== 'trade' || !Array.isArray(message.data)) return
-      for (const trade of message.data) {
-        if (trade.s === 'TSLA' && Number.isFinite(trade.p) && Number.isFinite(trade.t)) {
-          updateStreamPrice('TSLA', trade.p as number, trade.t as number, 'finnhub')
-        }
-      }
-    } catch (error) {
-      console.error('[Finnhub] Could not parse trade stream message:', error)
-    }
-  })
-  socket.on('error', (error) => console.error('[Finnhub] Trade stream error:', error.message))
-  socket.on('close', () => {
-    const reconnect = setTimeout(connectFinnhubStream, 5000)
-    reconnect.unref()
-  })
-}
-
-function connectBinanceStream() {
-  const streams = Object.keys(BINANCE_STREAM_SYMBOLS).map((symbol) => `${symbol}@trade`).join('/')
-  const socket = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`)
-  socket.on('message', (raw) => {
-    try {
-      const message = JSON.parse(raw.toString()) as { data?: { s?: string; p?: string; E?: number } }
-      const trade = message.data
-      const symbol = trade?.s ? BINANCE_STREAM_SYMBOLS[trade.s.toLowerCase()] : undefined
-      const price = Number(trade?.p)
-      if (symbol && Number.isFinite(price) && Number.isFinite(trade?.E)) {
-        updateStreamPrice(symbol, price, trade!.E as number, 'binance')
-      }
-    } catch (error) {
-      console.error('[Binance] Could not parse trade stream message:', error)
-    }
-  })
-  socket.on('error', (error) => console.error('[Binance] Trade stream error:', error.message))
-  socket.on('close', () => {
-    const reconnect = setTimeout(connectBinanceStream, 5000)
-    reconnect.unref()
-  })
-}
-
-async function fetchFinnhubStock(symbol: string): Promise<{ price: number; change: number; updatedAt: number }> {
+async function fetchFinnhubStock(symbol: string): Promise<{ price: number; change: number }> {
   if (!FINNHUB_API_KEY) throw new Error('FINNHUB_API_KEY is not configured on the price server.')
 
   const url = new URL('https://finnhub.io/api/v1/quote')
@@ -167,21 +93,16 @@ async function fetchFinnhubStock(symbol: string): Promise<{ price: number; chang
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
   if (!res.ok) throw new Error(`Finnhub quote request failed (HTTP ${res.status}).`)
 
-  const data = await res.json() as { c?: number; dp?: number; t?: number }
+  const data = await res.json() as { c?: number; dp?: number }
   if (!Number.isFinite(data.c) || (data.c ?? 0) <= 0) {
     throw new Error('Finnhub returned no current quote for TSLA.')
   }
-  return {
-    price: data.c as number,
-    change: Number.isFinite(data.dp) ? data.dp as number : 0,
-    updatedAt: Number.isFinite(data.t) && (data.t ?? 0) > 0 ? (data.t as number) * 1000 : Date.now(),
-  }
+  return { price: data.c as number, change: Number.isFinite(data.dp) ? data.dp as number : 0 }
 }
 
 async function updateTslaPrice() {
-  if (Date.now() - (lastStreamUpdate.get('TSLA') || 0) < 15_000) return
   const ref = db.collection('assets').doc('TSLA')
-  let result: { price: number; change: number; updatedAt?: number }
+  let result: { price: number; change: number }
   let priceSource: 'finnhub' | 'nasdaq' = 'finnhub'
 
   try {
@@ -222,7 +143,7 @@ async function updateTslaPrice() {
     }
   }
 
-  const sampledAt = result.updatedAt || Date.now()
+  const sampledAt = Date.now()
   priceCache.TSLA = {
     currentPrice: result.price,
     change24h: result.change,
@@ -511,7 +432,7 @@ async function runPricePolling() {
   for (const sym of cryptoSymbols) {
     const result = cryptoResults[sym] || coingeckoResults[sym] || binanceResults[sym]
     const priceSource = cryptoResults[sym] ? 'freecrypto' : coingeckoResults[sym] ? 'coingecko' : 'binance'
-    if (result && Date.now() - (lastStreamUpdate.get(sym) || 0) >= 15_000) {
+    if (result) {
       priceCache[sym] = {
         currentPrice: result.price,
         change24h: result.change,
@@ -568,8 +489,6 @@ async function runPricePolling() {
 }
 
 // Schedule price polling every 10 seconds
-connectFinnhubStream()
-connectBinanceStream()
 cron.schedule('*/10 * * * * *', () => { void pollPrices() })
 void pollPrices()
 setInterval(() => { void refreshPriceHistory() }, HISTORY_REFRESH_MS)

@@ -105,7 +105,7 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
 
     // Initial fetch + interval
     fetchPrices()
-    const id = setInterval(fetchPrices, 1000)
+    const id = setInterval(fetchPrices, 5000)
     return () => { mounted = false; clearInterval(id) }
   }, [])
 
@@ -126,7 +126,7 @@ export function useAssets(): { assets: Asset[]; priceMap: PriceMap; error: strin
       setAssets((prev) => (prev && prev.length > 0 ? prev : DEFAULT_ASSETS))
     }, 500)
 
-    const clock = setInterval(() => setNow(Date.now()), 1000)
+    const clock = setInterval(() => setNow(Date.now()), 5000)
     return () => {
       clearTimeout(t)
       clearInterval(clock)
