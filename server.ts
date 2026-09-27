@@ -84,6 +84,22 @@ const priceCache: Record<string, {
 let lastUpdate = ''
 let polling = false
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms.`)), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timeout)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timeout)
+        reject(error)
+      },
+    )
+  })
+}
+
 async function fetchFinnhubStock(symbol: string): Promise<{ price: number; change: number }> {
   if (!FINNHUB_API_KEY) throw new Error('FINNHUB_API_KEY is not configured on the price server.')
 
@@ -127,14 +143,14 @@ async function updateTslaPrice() {
       }
       if (FIRESTORE_WRITE_ENABLED) {
         try {
-          await ref.set({
+          await withTimeout(ref.set({
             name: 'Tesla Inc.',
             type: 'stock',
             priceSource: 'finnhub',
             priceStatus: 'error',
             priceError: message,
             updatedAt: FieldValue.serverTimestamp(),
-          }, { merge: true })
+          }, { merge: true }), 8000)
         } catch (firestoreError) {
           console.error('[Firestore] Could not record TSLA quote error:', firestoreError)
         }
@@ -154,7 +170,7 @@ async function updateTslaPrice() {
   }
   if (FIRESTORE_WRITE_ENABLED) {
     try {
-      await ref.set({
+      await withTimeout(ref.set({
         name: 'Tesla Inc.',
         type: 'stock',
         currentPrice: result.price,
@@ -164,7 +180,7 @@ async function updateTslaPrice() {
         priceError: null,
         priceUpdatedAt: sampledAt,
         updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true })
+      }, { merge: true }), 8000)
     } catch (error) {
       console.error('[Firestore] Could not save TSLA quote:', error)
     }
@@ -485,7 +501,7 @@ async function runPricePolling() {
 
   try {
     if (FIRESTORE_WRITE_ENABLED) {
-      await batch.commit()
+      await withTimeout(batch.commit(), 8000)
       lastUpdate = ts
       console.log(`[${ts}] Prices updated`)
     } else {
