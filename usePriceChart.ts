@@ -37,7 +37,7 @@ export function usePriceChart(
       try {
         const response = await fetch(`${priceApiUrl}/historical/${symbol}?timeframe=${range}`, { cache: 'no-store', signal: AbortSignal.timeout(12000) })
         if (!response.ok) throw new Error(`Price server returned ${response.status}.`)
-        const points = await response.json() as Array<{ price?: number; open?: number; high?: number; low?: number; close?: number }>
+        const points = await response.json() as Array<{ time?: number | string; timestamp?: number | string; price?: number; open?: number; high?: number; low?: number; close?: number }>
         if (!Array.isArray(points)) throw new Error('Price server returned invalid historical data.')
         const sampledAt = Date.now()
         const nextCandles = points.flatMap((point, index) => {
@@ -46,8 +46,12 @@ export function usePriceChart(
           const high = point.high ?? (open !== undefined && close !== undefined ? Math.max(open, close) : undefined)
           const low = point.low ?? (open !== undefined && close !== undefined ? Math.min(open, close) : undefined)
           if (![open, high, low, close].every(Number.isFinite)) return []
+          const rawTime = Number(point.time ?? point.timestamp)
+          const time = Number.isFinite(rawTime) && rawTime > 0
+            ? rawTime < 1_000_000_000_000 ? rawTime * 1000 : rawTime
+            : sampledAt - (points.length - index - 1) * config.intervalMs
           return [{
-            time: sampledAt - (points.length - index - 1) * config.intervalMs,
+            time,
             open: open as number,
             high: high as number,
             low: low as number,
@@ -55,6 +59,8 @@ export function usePriceChart(
             volume: 0,
           }]
         })
+          .sort((a, b) => a.time - b.time)
+          .filter((candle, index, sorted) => index === 0 || candle.time > sorted[index - 1].time)
         if (!active) return
         console.debug('[PriceChart] received history', { symbol, range, points: points.length, validCandles: nextCandles.length, sample: nextCandles[0] })
         setCandles(nextCandles)
