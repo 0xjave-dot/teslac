@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useMemo, useRef } from 'react'
 import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import {
   Area,
@@ -40,8 +40,16 @@ function CandlestickChart({ data, height }: { data: ReturnType<typeof usePriceCh
         vertLines: { color: 'rgba(255,255,255,0.04)' },
         horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
-      timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: true, secondsVisible: false },
+      rightPriceScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        scaleMargins: { top: 0.1, bottom: 0.1 },
+      },
+      timeScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 2,
+      },
     })
     const series = chart.addCandlestickSeries({
       upColor: '#10b981',
@@ -95,6 +103,18 @@ export function StockPriceChart({
 }) {
   const { data, loading, error, warning } = usePriceChart(symbol, range, asset, now)
   const gradientId = `price-gradient-${useId().replace(/:/g, '')}`
+  const priceDomain = useMemo<[number, number]>(() => {
+    const prices = data.flatMap((point) => [point.low, point.high]).filter(Number.isFinite)
+    if (prices.length === 0) return [0, 1]
+
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    const padding = min === max
+      ? Math.max(Math.abs(min) * 0.02, 0.01)
+      : (max - min) * 0.1
+
+    return [Math.max(0, min - padding), max + padding]
+  }, [data])
 
   if (loading && data.length === 0) {
     return <div role="status" className="flex items-center justify-center text-xs text-white/45" style={{ height }}>Loading real market history…</div>
@@ -130,7 +150,7 @@ export function StockPriceChart({
                 <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                 <YAxis
-                  domain={['auto', 'auto']}
+                  domain={priceDomain}
                   tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.3)' }}
                   axisLine={false}
                   tickLine={false}
